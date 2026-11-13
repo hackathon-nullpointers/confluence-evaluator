@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 from .config import EvaluationError
 from .constants import PROMPT_VERSION, SCORING_VERSION
@@ -25,6 +26,7 @@ class EvaluationDatabase:
         pages: list[dict[str, Any]],
         evaluation_date: date,
         model: str,
+        jira_project_key: str,
     ) -> None:
         with self.connection.transaction():
             with self.connection.cursor() as cursor:
@@ -127,6 +129,27 @@ class EvaluationDatabase:
                     INSERT INTO page_evaluations ({", ".join(evaluation_columns)})
                     VALUES ({placeholders})
                     ON CONFLICT (page_id, evaluation_date) DO UPDATE SET {updates}
+                    RETURNING evaluation_id
+                """
+                insert_jira_trace = """
+                    INSERT INTO jira_evaluation_issues (
+                        evaluation_id,
+                        jira_project_key,
+                        sync_status,
+                        feedback_snapshot,
+                        last_action,
+                        last_error
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (evaluation_id) DO UPDATE SET
+                        jira_project_key = EXCLUDED.jira_project_key,
+                        sync_status = EXCLUDED.sync_status,
+                        feedback_snapshot = COALESCE(
+                            EXCLUDED.feedback_snapshot,
+                            jira_evaluation_issues.feedback_snapshot
+                        ),
+                        last_action = EXCLUDED.last_action,
+                        last_error = EXCLUDED.last_error
                 """
 
                 now = datetime.now(UTC)
@@ -184,4 +207,91 @@ class EvaluationDatabase:
                     cursor.execute(
                         insert_evaluation,
                         tuple(values[column] for column in evaluation_columns),
+                    )
+                    row = cursor.fetchone()
+                    if row is None:
+                        raise EvaluationError(
+                            f"No se guardó la evaluación de la página "
+                            f"{page['page_id']}."
+                        )
+
+                    if succeeded and page["total_score"] < 75:
+                        feedback = page.get("evaluation_feedback")
+                        feedback_failure = page.get("feedback_failure")
+                        if feedback:
+                            sync_status = "pending"
+                            feedback_snapshot = Jsonb(feedback)
+                            last_action = None
+                            last_error = None
+                        else:
+                            sync_status = "failed"
+                            feedback_snapshot = None
+                            last_action = "failed" if feedback_failure else None
+                            last_error = feedback_failure or (
+                                "No se generó feedback IA para la evaluación."
+                            )
+                        cursor.execute(
+                            insert_jira_trace,
+                            (
+                                row[0],
+                                jira_project_key,
+                                sync_status,
+                                feedback_snapshot,
+                                last_action,
+                                last_error,
+                            ),
+                        )
+
+    def record_jira_sync(
+        self,
+        page_id: str,
+        evaluation_date: date,
+        status: str,
+        action: str | None,
+        issue_key: str | None,
+        issue_url: str | None,
+        error_message: str | None,
+    ) -> None:
+        now = datetime.now(UTC)
+        with self.connection.transaction():
+            with self.connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE jira_evaluation_issues AS tracking
+                    SET jira_issue_key = COALESCE(%s, tracking.jira_issue_key),
+                        jira_issue_url = COALESCE(%s, tracking.jira_issue_url),
+                        sync_status = %s,
+                        last_action = %s,
+                        sync_attempt_count = tracking.sync_attempt_count + 1,
+                        last_attempted_at = %s,
+                        last_synced_at = CASE
+                            WHEN %s = 'synced' THEN %s
+                            ELSE tracking.last_synced_at
+                        END,
+                        last_error = %s
+                    FROM page_evaluations AS evaluation
+                    JOIN confluence_pages AS page
+                        ON page.id = evaluation.page_id
+                    WHERE tracking.evaluation_id = evaluation.evaluation_id
+                        AND page.confluence_page_id = %s
+                        AND evaluation.evaluation_date = %s
+                    RETURNING tracking.evaluation_id
+                    """,
+                    (
+                        issue_key,
+                        issue_url,
+                        status,
+                        action,
+                        now,
+                        status,
+                        now,
+                        error_message[:2000] if error_message else None,
+                        page_id,
+                        evaluation_date,
+                    ),
+                )
+                if cursor.fetchone() is None:
+                    raise EvaluationError(
+                        f"No hay trazabilidad Jira para la evaluación "
+                        f"de la página {page_id} del {evaluation_date}."
                     )

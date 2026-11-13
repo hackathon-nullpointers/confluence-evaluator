@@ -189,5 +189,7 @@ class ConfluenceClient:
     def page_url(self, page: dict[str, Any]) -> str:
         webui = page.get("_links", {}).get("webui")
         if isinstance(webui, str) and webui:
+            if webui.startswith("/spaces/"):
+                webui = f"/wiki{webui}"
             return urljoin(self.site_url, webui)
         return f"{self.site_url}/wiki/pages/viewpage.action?pageId={quote(str(page['id']))}"

@@ -1,9 +1,9 @@
 import os
 import unittest
 from contextlib import redirect_stderr
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from io import StringIO
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from scripts.evaluate_confluence.config import (
     EvaluationError,
@@ -18,7 +18,13 @@ from scripts.evaluate_confluence.link_checker import (
     normalize_web_links,
     public_addresses,
 )
-from scripts.evaluate_confluence.copilot import validate_comment_batch
+from scripts.evaluate_confluence.ports import JiraIssueResult
+from scripts.evaluate_confluence.copilot import (
+    validate_comment_batch,
+    validate_evaluation_feedback,
+)
+from scripts.evaluate_confluence.database import EvaluationDatabase
+from scripts.evaluate_confluence.jira import JiraClient
 from scripts.evaluate_confluence.scoring import (
     WEIGHTS,
     assign_comparison_groups,
@@ -30,7 +36,24 @@ from scripts.evaluate_confluence.scoring import (
     subtract_calendar_months,
     weighted_total,
 )
-from scripts.evaluate_confluence.service import collect_page_work
+from scripts.evaluate_confluence.service import (
+    EvaluationService,
+    collect_page_work,
+)
+
+
+def test_settings() -> Settings:
+    return Settings(
+        site_url="https://bcphackaton.atlassian.net",
+        atlassian_email="evaluator@example.com",
+        atlassian_token="atlassian-token",
+        database_url="postgresql://localhost/test",
+        copilot_token="oauth-token",
+        copilot_model="gpt-4.1",
+        evaluation_date=date(2026, 11, 13),
+        dry_run=False,
+        jira_project_key="KAN",
+    )
 
 
 class EvaluationScoringTests(unittest.TestCase):
@@ -43,6 +66,7 @@ class EvaluationScoringTests(unittest.TestCase):
         with patch.dict(os.environ, environment, clear=True):
             settings = Settings.from_environment(dry_run=True)
         self.assertEqual(settings.copilot_model, "gpt-4.1")
+        self.assertEqual(settings.jira_project_key, "KAN")
 
     def test_headless_run_requires_copilot_sdk_token(self) -> None:
         environment = {
@@ -132,6 +156,265 @@ class EvaluationScoringTests(unittest.TestCase):
                 {"comments": [{"index": 4, "sentiment": "positive", "relevance": 1}]},
                 {4, 5},
             )
+
+    def test_evaluation_feedback_requires_reason_insights_and_recommendations(self) -> None:
+        feedback = validate_evaluation_feedback(
+            {
+                "evaluation_reason": "Los enlaces reducen el puntaje ponderado.",
+                "insights": ["Hay enlaces inválidos."],
+                "recommendations": ["Revisar los enlaces marcados como inválidos."],
+            }
+        )
+        self.assertEqual(feedback["insights"], ["Hay enlaces inválidos."])
+        with self.assertRaisesRegex(EvaluationError, "recommendations"):
+            validate_evaluation_feedback(
+                {
+                    "evaluation_reason": "Puntaje bajo.",
+                    "insights": ["Hay enlaces inválidos."],
+                    "recommendations": [],
+                }
+            )
+
+    def test_jira_issue_creation_adds_project_type_and_idempotency_label(self) -> None:
+        jira = JiraClient(test_settings())
+        page = {
+            "page_id": "1343489",
+            "title": "Excepciones de análisis estático",
+            "page_url": "https://bcphackaton.atlassian.net/wiki/spaces/DSEC/pages/1343489",
+            "total_score": 71.5,
+            "scores": {
+                "author_exists_score": 100.0,
+                "comments_score": 50.0,
+                "freshness_score": 75.0,
+                "structure_score": 60.0,
+                "likes_score": 50.0,
+                "spelling_score": 80.0,
+                "links_score": 40.0,
+            },
+            "evaluation_feedback": {
+                "evaluation_reason": "Los enlaces aportan el menor puntaje ponderado.",
+                "insights": ["Se encontraron enlaces inválidos."],
+                "recommendations": ["Corregir los enlaces rotos."],
+            },
+        }
+
+        with patch.object(
+            jira,
+            "_request_json",
+            side_effect=[{"issues": []}, {"key": "KAN-123"}],
+        ) as request:
+            issue_key = jira.upsert_evaluation_issue(page, date(2026, 11, 13))
+
+        self.assertEqual(issue_key.key, "KAN-123")
+        self.assertEqual(issue_key.url, "https://bcphackaton.atlassian.net/browse/KAN-123")
+        self.assertEqual(issue_key.action, "created")
+        create_call = request.call_args_list[1]
+        self.assertEqual(create_call.args[0:2], ("POST", "issue"))
+        fields = create_call.args[2]["fields"]
+        self.assertEqual(fields["project"], {"key": "KAN"})
+        self.assertEqual(fields["issuetype"], {"name": "Task"})
+        self.assertEqual(fields["labels"], ["confluence-eval-1343489-20261113"])
+        self.assertIn("Corregir los enlaces rotos", str(fields["description"]))
+
+    def test_jira_issue_upsert_updates_matching_issue(self) -> None:
+        jira = JiraClient(test_settings())
+        page = {
+            "page_id": "1343489",
+            "title": "Guía",
+            "page_url": "https://example.com/page",
+            "total_score": 70.0,
+            "scores": {
+                "author_exists_score": 100.0,
+                "comments_score": 50.0,
+                "freshness_score": 75.0,
+                "structure_score": 60.0,
+                "likes_score": 50.0,
+                "spelling_score": 80.0,
+                "links_score": 40.0,
+            },
+            "evaluation_feedback": {
+                "evaluation_reason": "Puntaje bajo.",
+                "insights": ["Faltan enlaces válidos."],
+                "recommendations": ["Agregar fuentes vigentes."],
+            },
+        }
+
+        with patch.object(
+            jira,
+            "_request_json",
+            side_effect=[{"issues": [{"key": "KAN-123"}]}, {}],
+        ) as request:
+            issue_key = jira.upsert_evaluation_issue(page, date(2026, 11, 13))
+
+        self.assertEqual(issue_key.key, "KAN-123")
+        self.assertEqual(issue_key.action, "updated")
+        self.assertEqual(request.call_args_list[1].args[:2], ("PUT", "issue/KAN-123"))
+
+    def test_jira_publishing_only_sends_failed_threshold_pages(self) -> None:
+        jira = Mock()
+        jira.upsert_evaluation_issue.return_value = JiraIssueResult(
+            "KAN-123",
+            "https://bcphackaton.atlassian.net/browse/KAN-123",
+            "created",
+        )
+        database = Mock()
+        service = EvaluationService(
+            test_settings(),
+            jira_factory=Mock(return_value=jira),
+            repository_factory=Mock(return_value=database),
+        )
+        pages = [
+            {
+                "page_id": "low",
+                "title": "Bajo",
+                "space_key": "DSEC",
+                "total_score": 74.99,
+                "failure": None,
+                "evaluation_feedback": {
+                    "evaluation_reason": "Puntaje bajo.",
+                    "insights": ["Faltan enlaces válidos."],
+                    "recommendations": ["Agregar fuentes vigentes."],
+                },
+            },
+            {"page_id": "at-limit", "title": "Límite", "space_key": "DSEC", "total_score": 75.0, "failure": None},
+            {"page_id": "failed", "title": "Fallida", "space_key": "DSEC", "total_score": 20.0, "failure": "Error"},
+        ]
+
+        failures = service._publish_jira_issues(pages)
+
+        self.assertEqual(failures, 0)
+        jira.upsert_evaluation_issue.assert_called_once_with(
+            pages[0], date(2026, 11, 13)
+        )
+        database.record_jira_sync.assert_called_once_with(
+            "low",
+            date(2026, 11, 13),
+            "synced",
+            "created",
+            "KAN-123",
+            "https://bcphackaton.atlassian.net/browse/KAN-123",
+            None,
+        )
+        database.close.assert_called_once_with()
+        jira.close.assert_called_once_with()
+
+    def test_jira_failure_is_recorded_for_retry(self) -> None:
+        jira = Mock()
+        jira.upsert_evaluation_issue.side_effect = EvaluationError("Jira HTTP 503")
+        database = Mock()
+        service = EvaluationService(
+            test_settings(),
+            jira_factory=Mock(return_value=jira),
+            repository_factory=Mock(return_value=database),
+        )
+        page = {
+            "page_id": "low",
+            "title": "Bajo",
+            "space_key": "DSEC",
+            "total_score": 60.0,
+            "failure": None,
+            "evaluation_feedback": {
+                "evaluation_reason": "Puntaje bajo.",
+                "insights": ["Faltan enlaces válidos."],
+                "recommendations": ["Agregar fuentes vigentes."],
+            },
+        }
+
+        with redirect_stderr(StringIO()):
+            failures = service._publish_jira_issues([page])
+
+        self.assertEqual(failures, 1)
+        database.record_jira_sync.assert_called_once_with(
+            "low",
+            date(2026, 11, 13),
+            "failed",
+            "failed",
+            None,
+            None,
+            "Jira HTTP 503",
+        )
+
+    def test_persist_stores_jira_trace_and_feedback_snapshot(self) -> None:
+        database = object.__new__(EvaluationDatabase)
+        database.connection = MagicMock()
+        cursor = database.connection.cursor.return_value.__enter__.return_value
+        cursor.fetchone.side_effect = [(1,), (2,), (3,)]
+        feedback = {
+            "evaluation_reason": "Los enlaces reducen el puntaje.",
+            "insights": ["Hay enlaces inválidos."],
+            "recommendations": ["Reparar los enlaces."],
+        }
+        page = {
+            "page_id": "page-1",
+            "space_id": "space-1",
+            "title": "Guía",
+            "page_url": "https://example.com/page",
+            "confluence_status": "current",
+            "failure": None,
+            "author_account_id": "author-1",
+            "author_display_name": "Ada",
+            "author_email": "ada@example.com",
+            "updated_at": datetime(2026, 11, 12, tzinfo=UTC),
+            "likes_count": 1,
+            "word_count": 100,
+            "spelling_errors_count": 2,
+            "valid_links_count": 1,
+            "invalid_links_count": 2,
+            "unchecked_links_count": 0,
+            "comparison_group": "global",
+            "scores": {criterion: 50.0 for criterion in WEIGHTS},
+            "total_score": 50.0,
+            "comment_metrics": {},
+            "evaluation_feedback": feedback,
+        }
+
+        database.persist(
+            [{"id": "space-1", "key": "DSEC", "name": "DevSecOps"}],
+            [page],
+            date(2026, 11, 13),
+            "gpt-4.1",
+            "KAN",
+        )
+
+        trace_query, trace_values = cursor.execute.call_args_list[-1].args
+        self.assertIn("INSERT INTO jira_evaluation_issues", trace_query)
+        self.assertEqual(trace_values[0:3], (3, "KAN", "pending"))
+        self.assertEqual(trace_values[4:], (None, None))
+        self.assertEqual(trace_values[3].obj, feedback)
+
+    def test_jira_sync_record_updates_status_and_attempt_metadata(self) -> None:
+        database = object.__new__(EvaluationDatabase)
+        database.connection = MagicMock()
+        cursor = database.connection.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value = (3,)
+
+        database.record_jira_sync(
+            "page-1",
+            date(2026, 11, 13),
+            "synced",
+            "created",
+            "KAN-123",
+            "https://bcphackaton.atlassian.net/browse/KAN-123",
+            None,
+        )
+
+        query, values = cursor.execute.call_args.args
+        self.assertIn("sync_attempt_count = tracking.sync_attempt_count + 1", query)
+        self.assertIn("last_synced_at = CASE", query)
+        self.assertEqual(
+            values[:4],
+            (
+                "KAN-123",
+                "https://bcphackaton.atlassian.net/browse/KAN-123",
+                "synced",
+                "created",
+            ),
+        )
+        self.assertIsInstance(values[4], datetime)
+        self.assertEqual(values[5], "synced")
+        self.assertIsInstance(values[6], datetime)
+        self.assertIsNone(values[7])
+        self.assertEqual(values[8:], ("page-1", date(2026, 11, 13)))
 
     def test_extract_document_collects_structure_and_ignores_code_for_spelling(self) -> None:
         document = extract_document(
@@ -259,6 +542,24 @@ class EvaluationScoringTests(unittest.TestCase):
             "https://confluence.example/wiki/rest/api/user",
             {"accountId": "author-1"},
             allow_not_found=True,
+        )
+
+    def test_page_url_includes_wiki_context_for_confluence_webui_paths(self) -> None:
+        client = object.__new__(ConfluenceClient)
+        client.site_url = "https://bcphackaton.atlassian.net"
+        title_path = "DSEC/pages/1343489/Excepciones+de+an+lisis+est+tico"
+
+        self.assertEqual(
+            client.page_url(
+                {"id": "1343489", "_links": {"webui": f"/spaces/{title_path}"}}
+            ),
+            f"https://bcphackaton.atlassian.net/wiki/spaces/{title_path}",
+        )
+        self.assertEqual(
+            client.page_url(
+                {"id": "1343489", "_links": {"webui": f"/wiki/spaces/{title_path}"}}
+            ),
+            f"https://bcphackaton.atlassian.net/wiki/spaces/{title_path}",
         )
 
     def test_page_work_includes_author_profile_when_confluence_exposes_it(self) -> None:

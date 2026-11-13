@@ -28,14 +28,28 @@ flowchart TD
     I -- No --> J[Asignar grupo comparable de likes]
     J --> K[Calcular percentil de likes y los 7 puntajes]
     K --> L[Aplicar pesos y obtener total de 0 a 100]
-    L --> M[Mostrar resultado y persistir evaluación diaria]
-    X --> M
+    L --> M{¿Puntaje menor que 75?}
+    M -- Sí --> N[Copilot explica el resultado y recomienda mejoras]
+    M -- No --> O[No requiere ticket Jira]
+    N --> P[Mostrar resultado y persistir evaluación]
+    O --> P
+    P --> Q[En ejecución normal: crear o actualizar Task para resultados bajo 75]
+    X --> P
 ```
 
 La recopilación y el análisis se hacen por página. Los fallos de una página no
 detienen la evaluación de las demás. Las páginas fallidas se guardan con estado
 `failed` y un mensaje de error, pero sin puntaje total. La ejecución termina con
 código de error si hubo al menos una página fallida.
+
+Para páginas con puntaje menor que 75, Copilot genera una explicación basada en
+los criterios, pesos y mediciones, además de insights y recomendaciones concretas.
+En ejecución normal, cada página bajo el umbral genera un `Task` en el proyecto
+configurado por `JIRA_PROJECT_KEY`. Una etiqueta con el ID de página y la fecha hace que una
+reejecución actualice el mismo issue en vez de duplicarlo. Si Jira falla para
+una página, se reporta el error, se continúa con las demás y la ejecución termina
+con código de error. `--dry-run` genera el feedback, pero no escribe en PostgreSQL
+ni en Jira.
 
 ## Puntajes y pesos
 
@@ -262,9 +276,11 @@ consultar el perfil se muestra como advertencia, pero no invalida el resto de
 la evaluación. La comprobación de enlaces se ejecuta por separado de Copilot.
 
 El contenido de página y comentarios se envía al GitHub Copilot SDK para los
-criterios de estructura, dominio, tipo documental y comentarios. Los prompts
-tratan el contenido recibido como datos no confiables, no habilitan herramientas
-y validan que la respuesta sea JSON con categorías e índices permitidos.
+criterios de estructura, dominio, tipo documental y comentarios. Para páginas
+bajo 75, el servicio solicita además la explicación del puntaje y recomendaciones.
+Los prompts tratan el contenido recibido como datos no confiables, no habilitan
+herramientas y validan que la respuesta sea JSON con categorías, índices y campos
+permitidos.
 
 ## Fecha de referencia y versiones
 
@@ -283,29 +299,35 @@ permite interpretar los puntajes históricos con la versión que los generó.
 
 | Responsabilidad | Módulo |
 | --- | --- |
-| Orquestar recopilación, análisis, puntuación y reporte | [`service.py`](./service.py) |
+| Orquestar recopilación, análisis, puntuación, Jira y reporte | [`service.py`](./service.py) |
 | Contener fórmulas numéricas, percentiles y fechas | [`scoring.py`](./scoring.py) |
 | Crear prompts de Copilot y validar respuestas | [`copilot.py`](./copilot.py) |
+| Crear y actualizar tickets Jira idempotentemente | [`jira.py`](./jira.py) |
 | Extraer contenido de Storage y Atlas Doc Format | [`documents.py`](./documents.py) |
 | Normalizar y comprobar enlaces con límites de seguridad | [`link_checker.py`](./link_checker.py) |
-| Guardar datos y resultados en PostgreSQL | [`database.py`](./database.py) |
+| Guardar evaluaciones y trazabilidad Jira en PostgreSQL | [`database.py`](./database.py) |
 | Definir pesos, límites, categorías y versiones | [`constants.py`](./constants.py) |
 
 ## Persistencia y errores
 
 El resultado se guarda en `page_evaluations`, una fila por página y
 `evaluation_date`. Si se vuelve a ejecutar en la misma fecha, el proceso
-actualiza la fila existente. Se almacenan los datos observados, los siete
-puntajes, el total, el estado, el modelo de IA y las versiones de prompt y
-scoring. Consulta [`../../db/README.md`](../../db/README.md) para el detalle de
-las tablas y migraciones.
+actualiza la fila existente. Para cada página bajo 75, `jira_evaluation_issues`
+guarda el snapshot del feedback, el proyecto, la clave/URL del issue, el estado
+de sincronización, los intentos, las fechas y el último error. Consulta
+[`../../db/README.md`](../../db/README.md) para el detalle de las tablas y
+migraciones.
 
 Un error no recuperable al obtener el contenido, mediciones requeridas o
 resultado de IA marca esa página como fallida. No se asigna un total a páginas
 fallidas ni se usan para calcular percentiles de likes. Una consulta de perfil
 fallida solo genera una advertencia; un enlace no verificable se cuenta como
-`unchecked`. Las otras páginas continúan. En modo `--dry-run` se ejecutan las
-mismas consultas y evaluaciones, pero no se escribe en PostgreSQL.
+`unchecked`. Las otras páginas continúan. Un error de Jira no revierte la
+evaluación ya guardada: se reporta y la ejecución termina con código de error.
+Si falla la generación de recomendaciones, se conserva la evaluación numérica,
+se reporta el error y no se crea el ticket de esa página.
+En modo `--dry-run` se ejecutan las mismas consultas y evaluaciones, pero no se
+escribe en PostgreSQL ni en Jira.
 
 ## Ejecución y configuración
 
@@ -317,5 +339,7 @@ python -m scripts.evaluate_confluence --dry-run
 ```
 
 El modo de prueba igualmente consulta Confluence, verifica enlaces externos y
-envía contenido a Copilot. Variables y credenciales requeridas se describen en
-[`../../README.md`](../../README.md).
+envía contenido a Copilot. Configura `JIRA_PROJECT_KEY` (por defecto `KAN`). Jira reutiliza
+`CONFLUENCE_BASE_URL`, `ATLASSIAN_EMAIL` y `ATLASSIAN_API_TOKEN`; la cuenta debe
+tener permisos para crear y editar issues en el proyecto. El resto de variables
+y credenciales requeridas se describen en [`../../README.md`](../../README.md).

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from urllib.parse import urlsplit, urlunsplit
@@ -23,6 +24,7 @@ class Settings:
     copilot_model: str
     evaluation_date: date
     dry_run: bool
+    jira_project_key: str
 
     @classmethod
     def from_environment(cls, dry_run: bool) -> Settings:
@@ -39,6 +41,9 @@ class Settings:
             or os.environ.get("GITHUB_TOKEN")
         )
         database_url = os.environ.get("DATABASE_URL")
+        jira_project_key = os.environ.get("JIRA_PROJECT_KEY", "KAN").strip()
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]*", jira_project_key):
+            raise EvaluationError("JIRA_PROJECT_KEY debe ser una clave de proyecto válida.")
 
         missing = [
             name
@@ -75,6 +80,7 @@ class Settings:
             copilot_model=os.environ.get("COPILOT_MODEL", COPILOT_MODEL_DEFAULT),
             evaluation_date=evaluation_date,
             dry_run=dry_run,
+            jira_project_key=jira_project_key,
         )
 
 def normalize_site_url(raw_url: str) -> str:

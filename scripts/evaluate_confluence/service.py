@@ -15,11 +15,13 @@ from .confluence import ConfluenceClient
 from .copilot import CopilotEvaluator
 from .database import EvaluationDatabase
 from .documents import extract_item_document, storage_value
+from .jira import JiraClient
 from .link_checker import check_links, normalize_web_links
 from .ports import (
     ConfluenceFactory,
     ConfluenceGateway,
     CopilotFactory,
+    JiraFactory,
     RepositoryFactory,
 )
 from .scoring import (
@@ -160,6 +162,7 @@ async def analyze_pages(
     token: str,
     model: str,
     evaluator_factory: CopilotFactory = CopilotEvaluator,
+    as_of: datetime | None = None,
 ) -> None:
     async with evaluator_factory(token, model) as evaluator:
         for page in pages:
@@ -176,6 +179,17 @@ async def analyze_pages(
             except Exception as error:
                 page["failure"] = f"{error.__class__.__name__}: {error}"[:2000]
 
+        prepare_scores(pages, as_of or datetime.now(UTC))
+        for page in pages:
+            if page["failure"] or page["total_score"] >= 75:
+                continue
+            try:
+                page["evaluation_feedback"] = await evaluator.explain_evaluation(page)
+            except Exception as error:
+                page["feedback_failure"] = (
+                    f"{error.__class__.__name__}: {error}"
+                )[:2000]
+
 
 class EvaluationService:
     def __init__(
@@ -184,6 +198,7 @@ class EvaluationService:
         confluence_factory: ConfluenceFactory = ConfluenceClient,
         evaluator_factory: CopilotFactory = CopilotEvaluator,
         repository_factory: RepositoryFactory = EvaluationDatabase,
+        jira_factory: JiraFactory = JiraClient,
         spell_checker_factory: Callable[[], SpellChecker] = create_spell_checker,
         link_checker: LinkChecker = check_links,
     ) -> None:
@@ -191,6 +206,7 @@ class EvaluationService:
         self.confluence_factory = confluence_factory
         self.evaluator_factory = evaluator_factory
         self.repository_factory = repository_factory
+        self.jira_factory = jira_factory
         self.spell_checker_factory = spell_checker_factory
         self.link_checker = link_checker
 
@@ -220,15 +236,19 @@ class EvaluationService:
                     self.settings.copilot_token,
                     self.settings.copilot_model,
                     self.evaluator_factory,
+                    datetime.now(UTC),
                 )
             )
-            prepare_scores(work, datetime.now(UTC))
 
             failures = self._report_results(work)
             if self.settings.dry_run:
-                print("Dry-run completado; no se escribieron resultados en PostgreSQL.")
+                print(
+                    "Dry-run completado; no se escribieron resultados en "
+                    "PostgreSQL ni se crearon tickets Jira."
+                )
             else:
                 self._persist(spaces, work)
+                failures += self._publish_jira_issues(work)
             return 1 if failures else 0
         finally:
             api.close()
@@ -247,6 +267,19 @@ class EvaluationService:
                     f"Evaluada: [{page['space_key']}] {page['title']} "
                     f"({page['total_score']:.2f}/100)"
                 )
+                feedback = page.get("evaluation_feedback")
+                if feedback:
+                    print(f"  Motivo: {feedback['evaluation_reason']}")
+                    for insight in feedback["insights"]:
+                        print(f"  Insight: {insight}")
+                    for recommendation in feedback["recommendations"]:
+                        print(f"  Recomendación: {recommendation}")
+                elif page.get("feedback_failure"):
+                    failures += 1
+                    print(
+                        f"  Feedback IA fallido: {page['feedback_failure']}",
+                        file=sys.stderr,
+                    )
         return failures
 
     def _persist(
@@ -259,6 +292,7 @@ class EvaluationService:
                 pages,
                 self.settings.evaluation_date,
                 self.settings.copilot_model,
+                self.settings.jira_project_key,
             )
         finally:
             database.close()
@@ -266,6 +300,65 @@ class EvaluationService:
             f"Persistidas {len(pages)} evaluaciones para "
             f"{self.settings.evaluation_date}."
         )
+
+    def _publish_jira_issues(self, pages: list[dict[str, Any]]) -> int:
+        eligible = [
+            page
+            for page in pages
+            if (
+                not page["failure"]
+                and page["total_score"] < 75
+                and page.get("evaluation_feedback")
+            )
+        ]
+        if not eligible:
+            return 0
+
+        database = self.repository_factory(self.settings.database_url)
+        failures = 0
+        try:
+            jira = self.jira_factory(self.settings)
+            try:
+                for page in eligible:
+                    try:
+                        result = jira.upsert_evaluation_issue(
+                            page, self.settings.evaluation_date
+                        )
+                    except EvaluationError as error:
+                        database.record_jira_sync(
+                            page["page_id"],
+                            self.settings.evaluation_date,
+                            "failed",
+                            "failed",
+                            None,
+                            None,
+                            str(error),
+                        )
+                        failures += 1
+                        print(
+                            f"Error Jira: [{page['space_key']}] "
+                            f"{page['title']}: {error}",
+                            file=sys.stderr,
+                        )
+                    else:
+                        database.record_jira_sync(
+                            page["page_id"],
+                            self.settings.evaluation_date,
+                            "synced",
+                            result.action,
+                            result.key,
+                            result.url,
+                            None,
+                        )
+                        print(
+                            f"Ticket Jira {result.action}: {result.key} "
+                            f"({page['title']})."
+                        )
+            finally:
+                jira.close()
+        finally:
+            database.close()
+        return failures
 
 
 def run_evaluation(settings: Settings) -> int:

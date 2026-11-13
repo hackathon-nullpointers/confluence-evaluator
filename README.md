@@ -82,15 +82,21 @@ Antes de ejecutar, instala `requirements.txt` y crea las tablas de
 anteriores, aplica en orden las migraciones
 [`001_add_evaluator_metrics.sql`](./db/migrations/001_add_evaluator_metrics.sql)
 y [`002_add_author_profile.sql`](./db/migrations/002_add_author_profile.sql).
+Aplica también [`003_add_jira_issue_traceability.sql`](./db/migrations/003_add_jira_issue_traceability.sql)
+para registrar la trazabilidad y el feedback guardados en Jira.
 El evaluador requiere Python 3.11 o posterior y estas variables:
 
-- `ATLASSIAN_EMAIL` y `ATLASSIAN_API_TOKEN`: credenciales API de Confluence.
+- `ATLASSIAN_EMAIL` y `ATLASSIAN_API_TOKEN`: credenciales Atlassian para
+  Confluence y Jira. La cuenta necesita permiso para crear y editar issues en
+  el proyecto Jira.
 - `COPILOT_GITHUB_TOKEN`: token OAuth de usuario compatible con GitHub Copilot
   SDK. Es obligatorio tanto localmente como en Actions; no uses un Personal
   Access Token, que el endpoint de Copilot rechaza.
 - `DATABASE_URL`: conexión PostgreSQL (no necesaria con `--dry-run`).
 - `CONFLUENCE_BASE_URL`: opcional; por defecto es
   `https://bcphackaton.atlassian.net`.
+- `JIRA_PROJECT_KEY`: opcional; proyecto destino de los tickets, por defecto
+  `KAN`.
 - `COPILOT_MODEL`: opcional; por defecto `gpt-4.1`, disponible para la cuenta
   validada con el SDK. Define otro modelo solo si aparece disponible para tu
   cuenta y funciona con el endpoint de chat usado por Copilot SDK.
@@ -106,8 +112,9 @@ python -m scripts.evaluate_confluence --dry-run
 ```
 
 `--dry-run` todavía consulta Confluence, verifica enlaces externos y envía el
-contenido de páginas y comentarios a Copilot para evaluarlos; solo evita
-persistir resultados en PostgreSQL. Ejecución normal:
+contenido de páginas y comentarios a Copilot para evaluarlos y generar
+recomendaciones; no persiste resultados en PostgreSQL ni crea tickets Jira.
+Ejecución normal:
 
 ```sh
 python -m scripts.evaluate_confluence
@@ -116,10 +123,10 @@ python -m scripts.evaluate_confluence
 El workflow
 [`evaluate-confluence.yml`](./.github/workflows/evaluate-confluence.yml)
 ejecuta las pruebas y evaluación cada día a las 07:00 UTC, y también admite
-ejecución manual. Configura los secretos `ATLASSIAN_EMAIL`,
-`ATLASSIAN_API_TOKEN`, `COPILOT_GITHUB_TOKEN` y `DATABASE_URL` en GitHub
-Actions. `COPILOT_GITHUB_TOKEN` debe ser un OAuth user access token aceptado por
-Copilot, no un PAT. Las variables `CONFLUENCE_BASE_URL` y `COPILOT_MODEL` son
+ejecución manual. Configura los secretos `ATLASSIAN_EMAIL`, `ATLASSIAN_API_TOKEN`,
+`COPILOT_GITHUB_TOKEN` y `DATABASE_URL` en GitHub Actions. `COPILOT_GITHUB_TOKEN`
+debe ser un OAuth user access token aceptado por Copilot, no un PAT. Las
+variables `CONFLUENCE_BASE_URL`, `COPILOT_MODEL` y `JIRA_PROJECT_KEY` son
 opcionales.
 
 El proceso actualiza la fila del mismo día en caso de reintento y guarda estado

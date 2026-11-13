@@ -8,7 +8,7 @@ las relaciones, conservando también los IDs externos de Confluence.
 ## Relaciones
 
 ```text
-confluence_spaces 1 ─── N confluence_pages 1 ─── N page_evaluations
+confluence_spaces 1 ─── N confluence_pages 1 ─── N page_evaluations 1 ─── 0..1 jira_evaluation_issues
 ```
 
 - Un espacio puede tener muchas páginas.
@@ -16,6 +16,8 @@ confluence_spaces 1 ─── N confluence_pages 1 ─── N page_evaluations
 - Una página puede tener múltiples evaluaciones históricas.
 - `page_evaluations` permite una sola fila por página y día mediante la
   restricción `UNIQUE (page_id, evaluation_date)`.
+- `jira_evaluation_issues` conserva la sincronización Jira asociada a una
+  evaluación; puede no existir si el puntaje es 75 o superior.
 
 ## Tablas
 
@@ -106,19 +108,40 @@ se calcularon.
 La explicación detallada de cada fórmula, umbral y criterio IA está en
 [`../scripts/evaluate_confluence/README.md`](../scripts/evaluate_confluence/README.md).
 
+### `jira_evaluation_issues`
+
+Trazabilidad del ticket Jira creado o actualizado para una evaluación con
+puntaje menor que 75. También registra fallas de generación de feedback o de
+sincronización para permitir auditoría y reintentos.
+
+| Columna | Descripción |
+| --- | --- |
+| `evaluation_id` | Clave primaria y foránea a `page_evaluations.evaluation_id`. |
+| `jira_project_key` | Clave del proyecto destino configurado. |
+| `jira_issue_key`, `jira_issue_url` | Clave y URL del ticket cuando Jira lo creó. |
+| `sync_status` | Estado: `pending`, `synced` o `failed`. |
+| `last_action` | Última acción: `created`, `updated` o `failed`. |
+| `feedback_snapshot` | JSON con el motivo, insights y recomendaciones generados para esa evaluación. |
+| `sync_attempt_count` | Cantidad de intentos hechos contra Jira. |
+| `last_attempted_at`, `last_synced_at` | Último intento y última sincronización exitosa. |
+| `last_error` | Último error de feedback o sincronización, si hubo. |
+| `created_at`, `updated_at` | Auditoría del registro local. |
+
 ## Auditoría y validación
 
 La función `set_updated_at()` y sus triggers actualizan automáticamente
-`updated_at` cuando se modifica un registro de espacio, página o evaluación.
+`updated_at` cuando se modifica un registro de espacio, página, evaluación o
+trazabilidad Jira.
 `created_at` y `updated_at` son fechas de los registros locales; no representan
 las fechas originales de Confluence. Para esto último, la evaluación conserva
 `confluence_updated_at`.
 
-El esquema no contiene restricciones `CHECK`. El servicio debe validar rangos
-de puntajes, conteos no negativos, estados permitidos, coherencia entre las
-mediciones y puntajes, y la presencia de datos necesarios para una evaluación
-completa. La base conserva claves primarias, claves foráneas y unicidad para
-mantener la identidad y las relaciones.
+La tabla de trazabilidad valida estados/acciones permitidos y que una
+sincronización exitosa tenga clave y URL de issue. El servicio valida rangos de
+puntajes, conteos no negativos, coherencia entre mediciones y puntajes, y
+presencia de datos necesarios para una evaluación completa. La base conserva
+claves primarias, claves foráneas y unicidad para mantener la identidad y las
+relaciones.
 
 Como solo se permite una evaluación diaria por página, una nueva ejecución el
 mismo día debe decidir cómo tratar un registro existente (por ejemplo, reintento
@@ -155,3 +178,10 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 El correo puede estar vacío o no estar disponible según la configuración de
 privacidad de la cuenta en Atlassian. El evaluador conserva el ID de cuenta y
 continúa aunque no pueda recuperar los datos de perfil.
+
+Para registrar las referencias Jira y el feedback enviado, aplica la migración:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f db/migrations/003_add_jira_issue_traceability.sql
+```
