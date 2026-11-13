@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 
 SCORING_VERSION = "v1"
 

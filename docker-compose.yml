@@ -1,0 +1,40 @@
+services:
+  app:
+    image: ricardovasquezpe/bcphackaton:latest
+    restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 256m
+    cpus: 0.3
+    ports:
+      - "80:3000"
+    volumes:
+      - ./.env:/app/.env:ro
+    depends_on:
+      - postgres
+    env_file:
+      - .env
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    mem_limit: 1024m
+    mem_reservation: 512m
+    cpus: 1
+    environment:
+      POSTGRES_DB: hackaton
+      POSTGRES_USER: hackaton
+      POSTGRES_PASSWORD: hackaton123456
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U "hackaton" -d "hackaton" && psql -U "hackaton" -d "hackaton" -c "SELECT 1" >/dev/null'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+volumes:
+  postgres-data:

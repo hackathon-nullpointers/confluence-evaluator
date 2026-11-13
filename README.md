@@ -113,7 +113,8 @@ python -m scripts.evaluate_confluence --dry-run
 
 `--dry-run` todavía consulta Confluence, verifica enlaces externos y envía el
 contenido de páginas y comentarios a Copilot para evaluarlos y generar
-recomendaciones; no persiste resultados en PostgreSQL ni crea tickets Jira.
+recomendaciones (mediante el agente `confluence-evaluator` y sus skills en
+`.github/agents` y `.github/skills`); no persiste resultados en PostgreSQL ni crea tickets Jira.
 Ejecución normal:
 
 ```sh

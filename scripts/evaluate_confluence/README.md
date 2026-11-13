@@ -275,12 +275,27 @@ El nombre y el correo dependen de la visibilidad del perfil; un error al
 consultar el perfil se muestra como advertencia, pero no invalida el resto de
 la evaluación. La comprobación de enlaces se ejecuta por separado de Copilot.
 
-El contenido de página y comentarios se envía al GitHub Copilot SDK para los
-criterios de estructura, dominio, tipo documental y comentarios. Para páginas
-bajo 75, el servicio solicita además la explicación del puntaje y recomendaciones.
-Los prompts tratan el contenido recibido como datos no confiables, no habilitan
-herramientas y validan que la respuesta sea JSON con categorías, índices y campos
-permitidos.
+Los criterios de estructura, dominio, tipo documental y comentarios, y la
+explicación del puntaje, los resuelve el agente de Copilot
+[`confluence-evaluator`](../../.github/agents/confluence-evaluator.agent.md) con
+tres skills en [`.github/skills/`](../../.github/skills):
+
+| `task` enviado | Skill | Contenido |
+| --- | --- | --- |
+| `structure_analysis` | `confluence-structure-analysis` | Rúbrica de estructura, dominios y tipos. |
+| `evaluation_feedback` | `confluence-evaluation-feedback` | Explicación, insights y recomendaciones. |
+| `comment_classification` | `confluence-comment-classification` | Sentimiento y relevancia por comentario. |
+
+Python solo envía un mensaje JSON con `task` y los datos de entrada; las
+instrucciones y el formato de salida viven en el agente y las skills. La sesión
+usa `custom_agents`, `skill_directories` con ruta absoluta y desactiva las demás
+skills del repositorio (por ejemplo `gitbot`). La sesión aprueba los permisos de
+herramientas para que el agente pueda cargar la skill; el contenido recibido se
+trata como dato no confiable. Se valida que la respuesta sea JSON con categorías,
+índices y campos permitidos.
+
+Para páginas bajo 75, el servicio solicita además la explicación del puntaje y
+recomendaciones.
 
 ## Fecha de referencia y versiones
 
@@ -292,7 +307,8 @@ vigencia.
 La base guarda `scoring_version` y `ai_prompt_version` para identificar las
 reglas y el prompt que produjeron cada resultado. Si se cambian pesos,
 umbrales, rúbricas o fórmulas, debe actualizarse `SCORING_VERSION`; si cambia
-la instrucción enviada a Copilot, debe actualizarse `PROMPT_VERSION`. Esto
+la instrucción enviada a Copilot (el agente o sus skills en `.github/`), debe
+actualizarse `PROMPT_VERSION`. Esto
 permite interpretar los puntajes históricos con la versión que los generó.
 
 ## Mapa de implementación
@@ -301,7 +317,8 @@ permite interpretar los puntajes históricos con la versión que los generó.
 | --- | --- |
 | Orquestar recopilación, análisis, puntuación, Jira y reporte | [`service.py`](./service.py) |
 | Contener fórmulas numéricas, percentiles y fechas | [`scoring.py`](./scoring.py) |
-| Crear prompts de Copilot y validar respuestas | [`copilot.py`](./copilot.py) |
+| Cargar el agente y sus skills, enviar tareas a Copilot y validar respuestas | [`copilot.py`](./copilot.py) |
+| Instrucciones del agente y de cada tarea de IA | [`.github/agents/`](../../.github/agents) y [`.github/skills/`](../../.github/skills) |
 | Crear y actualizar tickets Jira idempotentemente | [`jira.py`](./jira.py) |
 | Extraer contenido de Storage y Atlas Doc Format | [`documents.py`](./documents.py) |
 | Normalizar y comprobar enlaces con límites de seguridad | [`link_checker.py`](./link_checker.py) |

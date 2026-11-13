@@ -3,7 +3,7 @@ import unittest
 from contextlib import redirect_stderr
 from datetime import UTC, date, datetime, timedelta
 from io import StringIO
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from scripts.evaluate_confluence.config import (
     EvaluationError,
@@ -20,6 +20,12 @@ from scripts.evaluate_confluence.link_checker import (
 )
 from scripts.evaluate_confluence.ports import JiraIssueResult
 from scripts.evaluate_confluence.copilot import (
+    AGENT_NAME,
+    AGENT_SKILLS,
+    SKILLS_DIR,
+    CopilotEvaluator,
+    load_agent_config,
+    parse_frontmatter,
     validate_comment_batch,
     validate_evaluation_feedback,
 )
@@ -630,6 +636,50 @@ class EvaluationScoringTests(unittest.TestCase):
         self.assertIsNone(result[0]["author_email"])
         self.assertIsNone(result[0]["failure"])
         self.assertIn("HTTP 403", error_output.getvalue())
+
+
+class CopilotAgentTests(unittest.IsolatedAsyncioTestCase):
+    def test_agent_config_loads_prompt_and_skills(self) -> None:
+        agent = load_agent_config()
+
+        self.assertEqual(agent["name"], AGENT_NAME)
+        self.assertEqual(agent["skills"], list(AGENT_SKILLS))
+        self.assertNotIn("---", agent["prompt"].splitlines()[0])
+        for skill in AGENT_SKILLS:
+            self.assertIn(skill, agent["prompt"])
+
+    def test_every_agent_skill_declares_its_directory_name(self) -> None:
+        for skill in AGENT_SKILLS:
+            text = (SKILLS_DIR / skill / "SKILL.md").read_text(encoding="utf-8")
+            metadata, body = parse_frontmatter(text)
+            self.assertEqual(metadata["name"], skill)
+            self.assertTrue(metadata["description"])
+            self.assertTrue(body)
+
+    def test_frontmatter_is_required(self) -> None:
+        with self.assertRaises(EvaluationError):
+            parse_frontmatter("sin frontmatter")
+
+    async def test_ask_sends_task_payload_to_the_agent(self) -> None:
+        session = MagicMock()
+        session.__aenter__ = AsyncMock(return_value=session)
+        session.__aexit__ = AsyncMock(return_value=None)
+        session.send_and_wait = AsyncMock(
+            return_value=Mock(data=Mock(content='{"comments": []}'))
+        )
+        evaluator = CopilotEvaluator("token", "gpt-4.1")
+        evaluator.client.create_session = AsyncMock(return_value=session)
+
+        result = await evaluator._ask("comment_classification", {"page_title": "A"})
+
+        options = evaluator.client.create_session.call_args.kwargs
+        self.assertEqual(options["agent"], AGENT_NAME)
+        self.assertEqual(options["skill_directories"], [str(SKILLS_DIR)])
+        self.assertIn("gitbot", options["disabled_skills"])
+        self.assertEqual(result, {"comments": []})
+        message = session.send_and_wait.call_args.args[0]
+        self.assertIn('"task": "comment_classification"', message)
+        self.assertIn('"page_title": "A"', message)
 
 
 if __name__ == "__main__":
