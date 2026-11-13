@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "product": "Confluence Cloud",
+  "pages": [
+    {
+      "spaceKey": "ARQ",
+      "payload": {
+        "status": "current",
+        "title": "Arquitectura de referencia para servicios web",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Propósito</h1><p>Esta arquitectura de referencia define cómo construir y operar servicios web internos. Busca que los equipos compartan prácticas de integración, seguridad y operación sin imponer una implementación única.</p><h2>Alcance y contexto</h2><p>Aplica a servicios nuevos o que se someten a una modernización significativa. Las decisiones específicas de cada producto se registran en su propio documento de arquitectura.</p><h2>Componentes y flujo</h2><ol><li>El cliente consume una API HTTPS publicada por el gateway corporativo.</li><li>El gateway aplica autenticación, límites de consumo y enrutamiento.</li><li>El servicio valida el contrato, ejecuta reglas de dominio y accede a sus dependencias mediante interfaces explícitas.</li><li>Los eventos de negocio se publican de forma asíncrona cuando el consumidor no requiere una respuesta inmediata.</li></ol><h2>Requisitos de diseño</h2><ul><li>Definir contratos versionados y compatibilidad hacia atrás.</li><li>Evitar dependencias directas entre bases de datos de distintos dominios.</li><li>Propagar un identificador de correlación en solicitudes y mensajes.</li><li>Externalizar la configuración por ambiente y no incluir secretos en el repositorio.</li></ul><h2>Despliegue y operación</h2><p>Los servicios se empaquetan como artefactos inmutables y se despliegan mediante el pipeline aprobado. Cada servicio publica métricas de latencia, tasa de errores y saturación, además de una comprobación de salud para el orquestador.</p><h2>Revisión</h2><p>El equipo de plataforma revisa excepciones a estos principios durante el diseño. Las decisiones con impacto transversal deben registrar contexto, alternativas y consecuencias.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "ARQ",
+      "payload": {
+        "status": "current",
+        "title": "Decisiones de persistencia",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Registro de decisión: persistencia transaccional</h1><p><strong>Estado:</strong> Aprobada. <strong>Responsables:</strong> equipo de arquitectura y equipo de dominio. <strong>Revisión:</strong> anual o ante un cambio de volumen o criticidad.</p><h2>Contexto</h2><p>El servicio de pedidos debe guardar estados transaccionales, consultar pedidos por identificador y conservar consistencia entre las operaciones de creación y confirmación. El volumen inicial es moderado, con crecimiento esperado durante campañas estacionales.</p><h2>Alternativas consideradas</h2><ul><li>Base relacional administrada: transacciones ACID, consultas conocidas y herramientas operativas maduras.</li><li>Almacén documental: flexibilidad de esquema y escalado horizontal, con mayor complejidad para invariantes transaccionales.</li><li>Almacenamiento clave-valor: baja latencia para accesos por clave, pero requiere modelar consultas y reportes por separado.</li></ul><h2>Decisión</h2><p>Usar una base relacional administrada para el estado principal. Mantener el esquema bajo migraciones versionadas y limitar el acceso de la aplicación a las tablas de su dominio.</p><h2>Consecuencias y operación</h2><p>La decisión prioriza consistencia y facilidad de recuperación. El equipo debe probar migraciones con datos representativos, definir índices a partir de consultas medidas y revisar capacidad antes de campañas. Los reportes analíticos no deben ejecutar consultas costosas sobre la base transaccional; se publicarán mediante una canalización separada.</p><h2>Plan de revisión</h2><p>Reevaluar si las métricas de carga muestran saturación sostenida o si aparecen requisitos de consulta que no se resuelven con el modelo relacional.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "ARQ",
+      "payload": {
+        "status": "current",
+        "title": "Topología de integración heredada",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Inventario de integraciones heredadas</h1><p>Este inventario reúne los flujos que todavía dependen del bus de integración anterior. La información se está consolidando a partir de configuraciones de producción y entrevistas con los equipos propietarios; debe verificarse antes de cambiar una ruta.</p><h2>Flujos conocidos</h2><table><tbody><tr><th>Origen</th><th>Destino</th><th>Uso</th><th>Observación</th></tr><tr><td>Portal de clientes</td><td>Servicio de perfiles</td><td>Consulta de perfil</td><td>Sincronía HTTP; falta confirmar el límite de tiempo configurado.</td></tr><tr><td>Facturación</td><td>Repositorio documental</td><td>Entrega de comprobantes</td><td>Transferencia nocturna; el responsable operativo está pendiente de validar.</td></tr><tr><td>Gestión de pedidos</td><td>Bus anterior</td><td>Notificación de estado</td><td>Formato del mensaje no documentado en el repositorio actual.</td></tr></tbody></table><h2>Riesgos y vacíos</h2><p>No se ha confirmado si todos los consumidores aplican reintentos idempotentes. Tampoco se dispone de una medición común de latencia ni de un inventario completo de credenciales asociadas.</p><h2>Próximos pasos</h2><ol><li>Confirmar propietario técnico y de negocio de cada flujo.</li><li>Capturar contrato, frecuencia, volumen, criticidad y política de reintentos.</li><li>Validar dependencias en un ambiente controlado antes de planificar la migración.</li></ol><p>La antigua guía de conectividad se encontraba en <a href=\"https://legacy-docs.invalid/integration-guide\">este enlace heredado</a>; el destino debe localizarse o reemplazarse antes del cierre del inventario.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "ARQ",
+      "payload": {
+        "status": "current",
+        "title": "Guía de observabilidad",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Objetivo y principios</h1><p>La observabilidad permite detectar degradaciones y explicar el comportamiento de un servicio usando señales operativas. Cada equipo debe poder responder qué falla, a quién afecta y desde cuándo, sin depender de una reproducción manual del incidente.</p><h2>Señales mínimas</h2><ul><li><strong>Métricas:</strong> solicitudes por segundo, latencia por percentil, errores por clase y saturación de recursos.</li><li><strong>Registros:</strong> eventos estructurados con fecha UTC, nivel, servicio, ambiente y correlation ID. No registrar secretos ni datos personales innecesarios.</li><li><strong>Trazas:</strong> propagación del contexto entre llamadas HTTP y mensajería para identificar dependencias lentas.</li></ul><h2>Objetivos de servicio</h2><p>Para cada API crítica se acuerdan indicadores de disponibilidad y latencia con el propietario del producto. Las alertas deben activarse ante impacto sostenido en el usuario, no ante una variación aislada que el sistema pueda recuperarse automáticamente.</p><h2>Paneles y alertas</h2><p>El panel operativo incluye tráfico, errores, latencia y saturación en una misma ventana temporal. Las alertas indican el síntoma, el alcance, el enlace al panel y el procedimiento de respuesta. Cada alerta tiene un equipo de guardia responsable y una ruta de escalamiento.</p><h2>Validación</h2><p>Antes de producción, generar una solicitud de prueba y confirmar que su identificador aparece en logs y trazas. Revisar además que las métricas no contengan etiquetas de alta cardinalidad.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "ARQ",
+      "payload": {
+        "status": "current",
+        "title": "Límites de contexto de clientes",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Propósito</h1><p>La separación por dominios reduce el acoplamiento entre capacidades del negocio y permite que cada equipo evolucione su modelo con control explícito de sus reglas.</p><h2>Límites de contexto</h2><p>El contexto de Clientes administra identidad de contacto y preferencias de comunicación. Pedidos administra ciclo de vida, importes y estado de cumplimiento. Facturación conserva documentos tributarios y datos necesarios para su emisión. Un dato compartido no implica que exista una única tabla compartida.</p><h2>Reglas de integración</h2><ul><li>El equipo propietario publica una API o evento versionado para compartir cambios.</li><li>Los consumidores mantienen una proyección local cuando necesitan lecturas optimizadas.</li><li>Los eventos representan hechos ocurridos y se identifican con un ID único para permitir deduplicación.</li><li>Las operaciones entre contextos deben definir comportamiento ante timeout, reintento y compensación.</li></ul><h2>Ejemplo: cambio de dirección</h2><p>Clientes valida y guarda la dirección nueva, y publica un evento con el identificador de cliente y la versión del cambio. Pedidos actualiza su proyección para futuras órdenes; no modifica directamente el almacenamiento de Clientes. Las órdenes existentes conservan la dirección registrada al momento de la compra, salvo que una regla de negocio aprobada indique lo contrario.</p><h2>Gobierno</h2><p>Los cambios en límites o propiedad de datos se revisan con los equipos afectados. Las excepciones deben incluir una fecha de expiración y un plan de eliminación del acoplamiento.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "GJIRA",
+      "payload": {
+        "status": "current",
+        "title": "Convención de proyectos Jira",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Objetivo</h1><p>Esta convención establece un proceso repetible para crear proyectos Jira, asignar responsables y mantener una configuración que pueda ser operada y auditada.</p><h2>Convención de nombres</h2><p>El nombre debe identificar producto o capacidad y equipo responsable. La clave del proyecto se forma con una abreviatura legible de hasta diez caracteres, única en la instancia y aprobada por el administrador. No se reutilizan claves de proyectos archivados.</p><h2>Información requerida</h2><ul><li>Patrocinador de negocio y propietario técnico.</li><li>Equipo, propósito, audiencia y fecha estimada de revisión.</li><li>Tipo de trabajo: producto, soporte, plataforma o iniciativa temporal.</li><li>Esquemas de permisos, notificaciones y tipos de incidencia requeridos.</li><li>Clasificación de datos y requisitos de retención.</li></ul><h2>Flujo de solicitud</h2><ol><li>El solicitante completa la plantilla y obtiene aprobación del responsable del equipo.</li><li>El administrador revisa nombre, clave, configuración solicitada y posibles proyectos duplicados.</li><li>Se crea el proyecto desde el esquema estándar aprobado para ese tipo de trabajo.</li><li>El propietario valida accesos, campos y notificaciones antes de invitar usuarios.</li></ol><h2>Operación</h2><p>El propietario revisa miembros y configuración al menos cada seis meses. Los cambios globales se coordinan con administración de Jira y se anuncian a los equipos afectados.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "GJIRA",
+      "payload": {
+        "status": "current",
+        "title": "Flujo de aprobación de cambios",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Propósito</h1><p>Los cambios a esquemas compartidos pueden afectar varios equipos. Este flujo permite evaluar el impacto, obtener aprobación y conservar una ruta de reversión.</p><h2>Alcance</h2><p>Aplica a cambios de workflows, campos, pantallas, permisos, notificaciones y automatizaciones reutilizadas por más de un proyecto. Los cambios locales de contenido de una incidencia quedan fuera de este proceso.</p><h2>Procedimiento</h2><ol><li>Registrar una solicitud con problema observado, proyectos afectados, resultado esperado y urgencia.</li><li>El administrador identifica dependencias, cambios incompatibles y necesidades de migración de datos.</li><li>Probar la modificación en un proyecto de prueba con casos de creación, transición, búsqueda y notificación.</li><li>Solicitar aprobación del propietario del esquema y de al menos un representante de cada grupo afectado.</li><li>Programar la implementación, comunicar el cambio y documentar el mecanismo de reversión.</li><li>Después del cambio, validar permisos y flujos con usuarios de prueba y cerrar la solicitud con evidencia.</li></ol><h2>Excepciones</h2><p>Una corrección urgente puede seguir una ruta acelerada si el responsable de Jira registra el motivo, limita el alcance y define una revisión posterior dentro de los dos días hábiles siguientes.</p><h2>Criterio de cierre</h2><p>La solicitud se cierra cuando la configuración está verificada, los equipos fueron notificados y la documentación refleja el estado de producción.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "GJIRA",
+      "payload": {
+        "status": "current",
+        "title": "Ciclo de vida de incidencias",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Propósito</h1><p>Este documento describe el ciclo común de una incidencia desde su registro hasta su resolución. Los proyectos pueden añadir estados, pero deben conservar transiciones comprensibles para sus usuarios y métricas.</p><h2>Estados y significado</h2><ul><li><strong>Abierta:</strong> registrada y pendiente de triage.</li><li><strong>En curso:</strong> un responsable está investigando o implementando una solución.</li><li><strong>En revisión:</strong> el cambio está listo para revisión técnica o validación.</li><li><strong>Bloqueada:</strong> el trabajo no puede avanzar; debe incluir una causa y una dependencia.</li><li><strong>Resuelta:</strong> la corrección está disponible y se ha documentado el resultado.</li><li><strong>Cerrada:</strong> el solicitante confirma la resolución o vence el período de verificación.</li></ul><h2>Reglas de transición</h2><p>Al pasar a En curso, asignar un responsable y confirmar prioridad. Una incidencia Bloqueada conserva su estado original en el campo de resolución y se vincula a la dependencia. Antes de Resuelta, registrar la versión corregida o explicar por qué no aplica.</p><h2>Triage y mantenimiento</h2><p>El equipo revisa diariamente incidencias nuevas y bloqueadas. Incidencias sin actualización por más de diez días hábiles se revisan con el responsable; no deben cerrarse únicamente para mejorar métricas.</p><h2>Personalización</h2><p>Los nombres locales deben mapearse a las categorías abiertas, en curso, bloqueadas o terminadas para que los reportes transversales sigan siendo comparables.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "GJIRA",
+      "payload": {
+        "status": "current",
+        "title": "Matriz de permisos por rol",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Principio de acceso</h1><p>Los permisos de Jira se asignan por grupos administrados y roles de proyecto, aplicando el mínimo privilegio. Las cuentas individuales no se agregan directamente a esquemas compartidos salvo una excepción aprobada y con vencimiento.</p><h2>Roles de referencia</h2><table><tbody><tr><th>Rol</th><th>Capacidad habitual</th><th>Responsable</th></tr><tr><td>Administrador de proyecto</td><td>Gestionar componentes, versiones y miembros del proyecto.</td><td>Propietario técnico</td></tr><tr><td>Desarrollador</td><td>Crear y actualizar incidencias de trabajo.</td><td>Equipo del proyecto</td></tr><tr><td>Solo lectura</td><td>Consultar información autorizada sin modificarla.</td><td>Propietario de datos</td></tr><tr><td>Administrador Jira</td><td>Gestionar configuración global y esquemas compartidos.</td><td>Administración de Jira</td></tr></tbody></table><h2>Revisión de acceso</h2><p>El propietario revisa trimestralmente miembros, grupos y acceso de cuentas externas. Se retiran accesos que ya no tienen una justificación vigente. Las cuentas de servicio deben tener propietario, propósito, método de autenticación y fecha de revisión.</p><h2>Solicitud de excepción</h2><p>La solicitud incluye usuario o grupo, permisos requeridos, proyecto, motivo y fecha de expiración. El propietario del proyecto aprueba el acceso funcional y el administrador verifica que no se amplíen permisos fuera del alcance indicado.</p><h2>Respuesta a incidentes</h2><p>Ante exposición de información, retirar el acceso, conservar evidencia de auditoría y notificar al responsable de seguridad siguiendo el proceso corporativo.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "GJIRA",
+      "payload": {
+        "status": "current",
+        "title": "Retención de proyectos archivados",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Objetivo</h1><p>El archivo de proyectos reduce ruido operativo y conserva la información necesaria para auditoría, soporte y análisis histórico.</p><h2>Condiciones previas</h2><p>Un proyecto puede proponerse para archivo cuando no tiene trabajo activo, su propietario confirma que no se reabrirá en el ciclo actual y se han identificado dependencias de automatizaciones, tableros, filtros e integraciones.</p><h2>Procedimiento</h2><ol><li>El propietario anuncia la propuesta y confirma con los equipos consumidores que no necesitan el proyecto activo.</li><li>Revisar incidencias abiertas, automatizaciones, integraciones y enlaces desde documentación vigente.</li><li>Resolver, transferir o documentar cada elemento pendiente; retirar tokens e integraciones que ya no se usan.</li><li>Exportar la información requerida por la política de retención y registrar ubicación, fecha y responsable.</li><li>Archivar el proyecto usando el mecanismo administrado por Jira y verificar que ya no aparezca en flujos de trabajo diarios.</li></ol><h2>Retención y recuperación</h2><p>La duración de conservación depende de la clasificación y los requisitos regulatorios del proyecto. La clave archivada no se reutiliza. Una solicitud de restauración debe ser aprobada por el propietario del producto y el administrador Jira, y documentar el motivo y el período de actividad esperado.</p><h2>Registro</h2><p>La solicitud de archivo mantiene la fecha, aprobaciones, exportación, excepciones y ubicación del respaldo.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "DSEC",
+      "payload": {
+        "status": "current",
+        "title": "Revisión de dependencias",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Objetivo y alcance</h1><p>La revisión de dependencias identifica componentes vulnerables o sin mantenimiento antes de que lleguen a producción. Aplica a bibliotecas directas y transitivas, imágenes base y herramientas incluidas en la cadena de construcción.</p><h2>Proceso de análisis</h2><ol><li>Generar inventario de componentes a partir de archivos de bloqueo y manifiestos reproducibles.</li><li>Ejecutar el análisis en cada pull request y en una revisión programada de las ramas mantenidas.</li><li>Verificar si el hallazgo afecta la versión realmente empaquetada y si existe una actualización compatible.</li><li>Registrar un ticket con componente, versión, identificador del aviso, alcance y responsable.</li></ol><h2>Priorización</h2><p>La prioridad considera severidad técnica, exposición del componente, disponibilidad de exploit conocido y controles compensatorios. Un hallazgo crítico explotable en un servicio expuesto se escala inmediatamente; los demás se asignan según la política de remediación vigente.</p><h2>Remediación y excepciones</h2><p>Actualizar a una versión corregida y ejecutar pruebas de compatibilidad. Si no existe una actualización viable, documentar el análisis de impacto, controles temporales, responsable y fecha de vencimiento de la excepción.</p><h2>Evidencia</h2><p>Conservar el resultado del escaneo asociado al commit o artefacto evaluado. La guía de severidad de <a href=\"https://owasp.org/www-project-top-ten/\">OWASP</a> sirve como referencia complementaria, pero no sustituye la política interna.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "DSEC",
+      "payload": {
+        "status": "current",
+        "title": "Gestión de secretos",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Propósito</h1><p>Las credenciales permiten autenticación y deben tratarse como información confidencial. Esta guía describe su ciclo de vida en desarrollo, integración continua y producción.</p><h2>Almacenamiento permitido</h2><ul><li>Usar el gestor de secretos aprobado para cada ambiente y limitar el acceso al servicio que lo necesita.</li><li>Inyectar secretos durante la ejecución desde una identidad de carga de trabajo cuando esté disponible.</li><li>Usar credenciales de corta duración y rotación automática para integraciones compatibles.</li></ul><h2>Prácticas prohibidas</h2><p>No guardar tokens, claves privadas o contraseñas en el repositorio, archivos de configuración versionados, imágenes de contenedor, logs o tickets. No reutilizar secretos de producción en ambientes de desarrollo.</p><h2>Detección y respuesta</h2><ol><li>Ejecutar detección de secretos en pull requests y en los repositorios existentes.</li><li>Si se detecta una credencial, revocarla o rotarla de inmediato; borrar el texto del commit no elimina el riesgo.</li><li>Revisar logs de acceso desde la fecha de posible exposición y documentar los sistemas afectados.</li><li>Notificar al responsable del servicio y al equipo de seguridad según el proceso de incidentes.</li></ol><h2>Rotación y responsabilidad</h2><p>Cada secreto tiene propietario, propósito, alcance y procedimiento de rotación. La periodicidad se define según el tipo de credencial y el riesgo; las credenciales comprometidas se rotan sin esperar el ciclo regular.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "DSEC",
+      "payload": {
+        "status": "current",
+        "title": "Excepciones de análisis estático",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Propósito</h1><p>Las exclusiones del análisis estático deben ser específicas, justificadas y temporales. Una exclusión no debe ocultar otros hallazgos ni convertirse en una configuración permanente sin revisión.</p><h2>Datos requeridos</h2><p>La solicitud identifica regla y herramienta, archivo o línea afectada, fragmento mínimo, resultado del análisis manual, impacto potencial, responsable y fecha de expiración. Se adjunta evidencia suficiente para que otra persona pueda repetir la verificación.</p><h2>Evaluación</h2><ol><li>Confirmar que el hallazgo no es una vulnerabilidad real en el contexto de ejecución.</li><li>Buscar una corrección de código o una configuración más precisa antes de excluir.</li><li>Verificar el alcance de la regla para evitar silenciar resultados en otros archivos.</li><li>Obtener aprobación de seguridad y del propietario del componente.</li></ol><h2>Registro y vencimiento</h2><p>La excepción se versiona junto al código o configuración del escáner, incluye un identificador de seguimiento y expira en un máximo de 90 días. La renovación requiere una nueva revisión. El pipeline debe alertar antes del vencimiento y volver a evaluar el hallazgo cuando cambie el código.</p><h2>Formato recomendado</h2><p>Indicar en la excepción el motivo de forma precisa; no usar comentarios genéricos como “falso positivo”. Revisar las esepciones abiertas en la reunión mensual de seguridad y retirar las que ya no sean necesarias.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "DSEC",
+      "payload": {
+        "status": "current",
+        "title": "Modelo de amenazas",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Cuándo crear un modelo de amenazas</h1><p>Se requiere una revisión cuando un cambio introduce una nueva frontera de confianza, expone una interfaz a otra red, procesa una categoría nueva de datos o modifica autenticación, autorización o almacenamiento de secretos.</p><h2>Preparación</h2><p>Reunir al equipo de desarrollo, propietario del producto y representante de seguridad. Dibujar actores, almacenes de datos, procesos y flujos; marcar límites de confianza y protocolos utilizados. Registrar supuestos y dependencias externas.</p><h2>Análisis</h2><p>Para cada flujo, considerar suplantación, manipulación, repudio, divulgación, denegación de servicio y elevación de privilegios. Priorizar amenazas según probabilidad, impacto y exposición, no solo por cantidad de hallazgos.</p><h2>Tratamiento</h2><p>Vincular cada riesgo con un control verificable, un propietario y una fecha objetivo. Los riesgos aceptados deben tener aprobación explícita, justificación y condiciones para reevaluación. Incorporar controles en requisitos, pruebas y configuración de despliegue.</p><h2>Entregables y seguimiento</h2><p>Guardar el diagrama, la lista de amenazas, decisiones y tareas relacionadas con la versión revisada. Repetir el análisis cuando cambie significativamente el flujo o el límite de confianza. La metodología <a href=\"https://owasp.org/www-project-application-security-verification-standard/\">OWASP ASVS</a> puede ayudar a derivar requisitos de verificación.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "DSEC",
+      "payload": {
+        "status": "current",
+        "title": "Controles del pipeline seguro",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Objetivo</h1><p>El pipeline aplica controles consistentes desde el cambio de código hasta la publicación del artefacto. Los resultados deben ser trazables al commit y al ambiente de destino.</p><h2>Etapas mínimas</h2><ol><li>Validar formato, compilación y pruebas unitarias.</li><li>Ejecutar análisis estático y detección de credenciales en el cambio.</li><li>Analizar dependencias y construir un inventario de componentes de software.</li><li>Generar un artefacto inmutable y escanear la imagen o paquete resultante.</li><li>Firmar el artefacto y registrar commit, herramientas y resultados.</li><li>Promover el mismo artefacto entre ambientes; no reconstruirlo para producción.</li></ol><h2>Protección del pipeline</h2><p>Limitar permisos de runners y tokens al trabajo que los necesita. Proteger ramas y entornos de despliegue con revisiones requeridas. Fijar acciones y herramientas a versiones verificadas, y evitar que código no confiable acceda a secretos de producción. Seguir las recomendaciones de <a href=\"https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions\">endurecimiento de GitHub Actions</a> cuando aplique.</p><h2>Gestión de hallazgos</h2><p>Los bloqueos deben mostrar el control que falló, el artefacto evaluado y cómo solicitar una excepción. Las excepciones son limitadas en alcance, aprobadas y con expiración; no se deben desactivar controles globalmente para completar un despliegue.</p><h2>Operación</h2><p>Revisar trimestralmente permisos, versiones de herramientas y efectividad de los controles.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "TEST",
+      "payload": {
+        "status": "current",
+        "title": "Estrategia de pruebas por niveles",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Propósito</h1><p>La estrategia distribuye la verificación entre distintos niveles para encontrar defectos pronto y conservar una retroalimentación rápida. Cada equipo debe ajustar el balance según riesgo, arquitectura y costo de mantenimiento.</p><h2>Niveles de prueba</h2><ul><li><strong>Unitarias:</strong> validan reglas aisladas y casos límite; se ejecutan en cada cambio.</li><li><strong>Integración:</strong> verifican contratos con base de datos, mensajería y servicios dependientes en entornos controlados.</li><li><strong>Contrato:</strong> comprueban compatibilidad entre productores y consumidores de APIs o eventos.</li><li><strong>Extremo a extremo:</strong> recorren flujos críticos desde la interfaz, limitando su número por costo y fragilidad.</li><li><strong>No funcionales:</strong> cubren rendimiento, resiliencia, seguridad y accesibilidad según el perfil de riesgo.</li></ul><h2>Selección y datos</h2><p>Priorizar pruebas deterministas que detecten regresiones con mensajes de error accionables. Usar datos sintéticos o anonimizados; cada ejecución debe preparar y limpiar sus propios datos para evitar dependencias con el orden de las pruebas.</p><h2>Puertas de calidad</h2><p>El cambio no avanza si fallan pruebas obligatorias o si el resultado no puede reproducirse. Una prueba inestable se registra, se asigna a un responsable y se corrige; no se deshabilita sin fecha de revisión.</p><h2>Métricas</h2><p>Seguir tiempo de retroalimentación, defectos escapados y estabilidad del conjunto. La cobertura de código es una señal complementaria y no demuestra por sí sola la calidad de las pruebas.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "TEST",
+      "payload": {
+        "status": "current",
+        "title": "Criterios de aceptación",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Propósito</h1><p>Los criterios de aceptación describen resultados observables que permiten al equipo y al solicitante decidir si una historia está terminada. Se acuerdan antes de iniciar la implementación y se mantienen junto al requisito.</p><h2>Cómo redactarlos</h2><ul><li>Expresar una condición verificable desde el punto de vista del usuario o sistema.</li><li>Incluir el estado inicial, la acción y el resultado esperado, preferiblemente en formato Dado/Cuando/Entonces.</li><li>Evitar referencias a detalles internos que pueden cambiar sin afectar el comportamiento.</li><li>Incluir permisos, validaciones, errores y límites relevantes, no solo el camino exitoso.</li></ul><h2>Ejemplo</h2><p><strong>Dado</strong> que una persona autenticada tiene pedidos activos, <strong>cuando</strong> filtra por estado “En tránsito”, <strong>entonces</strong> solo aparecen pedidos con ese estado y se conserva la selección al volver desde el detalle.</p><h2>Verificación</h2><p>El equipo vincula cada criterio con uno o más casos de prueba y registra el resultado en el pipeline o en la ejecución de pruebas. Los datos de prueba deben cubrir valores límite y roles distintos cuando afecten el resultado.</p><h2>Fuera de alcance</h2><p>Las necesidades no cubiertas se anotan explícitamente para evitar que una interpretación implícita se convierta en requisito. Cambios posteriores se revisan con el propietario del producto y pueden requerir estimación nueva.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "TEST",
+      "payload": {
+        "status": "current",
+        "title": "Ejecución manual de regresión",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Propósito y preparación</h1><p>La regresión manual verifica los flujos de negocio que todavía no cuentan con automatización confiable o que requieren juicio humano. El conjunto debe mantenerse pequeño, priorizado y vinculado a riesgos conocidos.</p><h2>Antes de ejecutar</h2><ol><li>Confirmar versión, ambiente, datos disponibles y ventana de prueba.</li><li>Revisar cambios incluidos y seleccionar los casos relacionados con los componentes afectados.</li><li>Validar que las cuentas de prueba tengan los roles correctos y que los datos no contengan información real.</li></ol><h2>Registro del resultado</h2><p>Para cada caso, anotar identificador, versión, precondiciones, resultado esperado, resultado observado y estado. Adjuntar capturas o logs cuando ayuden a reproducir una discrepancia; ocultar tokens y datos personales antes de adjuntar evidencia.</p><h2>Incidencias</h2><p>Si un caso falla, confirmar que no sea una condición del ambiente, registrar los pasos exactos y crear una incidencia enlazada a la ejecución. No marcar como aprobado un caso bloqueado: usar un estado distinto y describir la dependencia.</p><h2>Cierre</h2><p>El responsable de pruebas resume casos aprobados, fallidos y bloqueados, riesgos residuales y recomendación de liberación. Las excepciones a la regresión requieren aprobación del responsable del producto.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "TEST",
+      "payload": {
+        "status": "current",
+        "title": "Reporte de defectos",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Propósito</h1><p>Un reporte de defecto debe permitir que otra persona reproduzca el problema, entienda su impacto y verifique la corrección sin depender de una conversación informal.</p><h2>Campos obligatorios</h2><ul><li>Resumen específico y componente afectado.</li><li>Ambiente, versión, navegador o dispositivo cuando corresponda.</li><li>Precondiciones, pasos numerados y datos de prueba.</li><li>Resultado esperado y resultado observado.</li><li>Frecuencia, severidad, prioridad sugerida y alcance de usuarios afectados.</li><li>Evidencia sanitizada y referencias a logs o ejecución de pruebas.</li></ul><h2>Ejemplo de pasos</h2><ol><li>Ingresar con un usuario de prueba con rol de supervisor.</li><li>Abrir la sección de pedidos y filtrar por “Pendiente”.</li><li>Seleccionar el primer resultado y descargar el comprobante.</li></ol><p><strong>Esperado:</strong> se descarga el PDF asociado al pedido. <strong>Observado:</strong> la descarga devuelve una respuesta vacía en dos de tres intentos.</p><h2>Triage y resolución</h2><p>El equipo confirma reproducibilidad, asigna propietario y prioriza con base en impacto y urgencia. Al resolver, documenta la versión corregida, la causa raíz cuando se conozca y la prueba de verificación. Si no se corrige, registra la decisión y aceptación del riesgo.</p><h2>Privacidad</h2><p>No adjuntar contraseñas, datos personales ni información de clientes. Reemplazar valores reales por datos sintéticos antes de compartir evidencia.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "TEST",
+      "payload": {
+        "status": "current",
+        "title": "Pruebas de accesibilidad",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Objetivo y alcance</h1><p>Las pruebas de accesibilidad detectan barreras en los flujos principales de la aplicación. Se integran durante el diseño y desarrollo; una verificación automática aislada no demuestra conformidad.</p><h2>Revisión automática</h2><p>Ejecutar herramientas automatizadas en páginas y estados representativos para detectar problemas de contraste, nombres accesibles, estructura y atributos. Revisar manualmente cada resultado y registrar falsos positivos con evidencia.</p><h2>Revisión manual</h2><ul><li>Navegar los flujos principales usando solo teclado y confirmar foco visible y orden lógico.</li><li>Probar formularios con lector de pantalla, incluidos mensajes de error y confirmaciones.</li><li>Verificar ampliación y redistribución del contenido en tamaños de pantalla reducidos.</li><li>Comprobar que color, iconografía o posición no sean el único medio para transmitir información.</li><li>Revisar subtítulos y alternativas textuales para contenido multimedia.</li></ul><h2>Cobertura y severidad</h2><p>Priorizar inicio de sesión, búsqueda, compra y tareas que bloquean el uso del producto. Registrar impacto, criterio aplicable, pasos de reproducción, tecnología de asistencia usada y evidencia. Los bloqueos de tareas críticas se corrigen antes de liberar o requieren una excepción aprobada con plan y fecha.</p><h2>Referencias</h2><p>Usar la <a href=\"https://www.w3.org/WAI/WCAG22/quickref/\">referencia rápida WCAG 2.2</a> para consultar criterios. Confirmar con el equipo de cumplimiento qué nivel y alcance aplican al producto.</p>"
+        }
+      }
+    }
+  ]
+}

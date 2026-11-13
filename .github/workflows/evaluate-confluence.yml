@@ -39,5 +39,5 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           CONFLUENCE_BASE_URL: ${{ vars.CONFLUENCE_BASE_URL || 'https://bcphackaton.atlassian.net' }}
-          COPILOT_MODEL: ${{ vars.COPILOT_MODEL || 'gpt-4.1' }}
+          COPILOT_MODEL: ${{ vars.COPILOT_MODEL || 'auto' }}
         run: python -m scripts.evaluate_confluence
