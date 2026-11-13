@@ -4,9 +4,13 @@
 
 [`mock-data/spaces.json`](./mock-data/spaces.json) define cuatro espacios:
 Arquitectura (`ARQ`), Gobierno Jira (`GJIRA`), DevSecOps (`DSEC`) y Testing
-(`TEST`). [`mock-data/pages.json`](./mock-data/pages.json) contiene 20 páginas
-de documentación en español, cinco por espacio, con contenido sustantivo en
-formato Confluence Storage.
+(`TEST`). [`mock-data/pages-initial.json`](./mock-data/pages-initial.json)
+contiene las 20 páginas iniciales de documentación en español, cinco por
+espacio, y [`mock-data/pages.json`](./mock-data/pages.json) contiene cuatro
+páginas adicionales (una por espacio) con los pasos y los tickets de Jira que se
+deben crear para un objetivo concreto, todas con contenido sustantivo en formato
+Confluence Storage. `scripts/populate_confluence.py` lee `pages.json` y omite
+las páginas cuyo título ya existe en el espacio.
 
 Cada elemento de `pages` contiene `spaceKey` para localizar el espacio y
 `payload` con `status`, `title` y `body`. Para crear una página con la API de
