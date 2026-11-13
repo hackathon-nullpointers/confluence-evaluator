@@ -1,5 +1,61 @@
 # confluence-evaluator
 
+## Limpieza de datos
+
+[`scripts/cleanup_confluence.py`](./scripts/cleanup_confluence.py) elimina solo
+las páginas registradas en PostgreSQL, conserva los espacios de Confluence,
+elimina **todos los tickets visibles del proyecto Jira indicado** (no solo los
+creados por el evaluador) y finalmente vacía las cuatro tablas del evaluador,
+incluida `confluence_spaces`, conservando el esquema. Las subtareas se eliminan
+antes de sus padres. No se usa `CASCADE` para vaciar tablas ajenas.
+
+Antes de aplicar, realiza una copia de seguridad y detén el workflow del
+evaluador y cualquier otro escritor de Jira, Confluence y la base. No existe
+rollback distribuido: un fallo conserva la base, pero no recupera los elementos
+ya eliminados de las APIs. Un error HTTP, incluido 404, detiene el proceso;
+revisa los IDs ya eliminados antes de reintentar. El borrado de páginas utiliza
+el comportamiento normal de Confluence (papelera), sin purga permanente.
+
+Configura `CONFLUENCE_BASE_URL`, `ATLASSIAN_EMAIL`, `ATLASSIAN_API_TOKEN` y
+`DATABASE_URL` en el entorno; no se carga `.env` automáticamente. La cuenta debe
+tener permisos de eliminación y visibilidad completa del proyecto Jira; el
+script no puede descubrir tickets ocultos por permisos. No requiere Copilot.
+
+Simulación por defecto, sin borrados:
+
+```sh
+python -m scripts.cleanup_confluence --project KAN
+```
+
+Para procesar de golpe todos los proyectos registrados en
+`jira_evaluation_issues`, sin indicar cada uno:
+
+```sh
+python -m scripts.cleanup_confluence --all-tracked-projects
+```
+
+Esta opción elimina todos los tickets visibles de esos proyectos, incluso los
+no creados por el evaluador; no toca proyectos ajenos al inventario. No elimina
+los proyectos Jira ni los espacios Confluence. Es incompatible con `--project`.
+Si no hay proyectos registrados, solo se procesan las páginas y la base.
+La simulación muestra la lista de proyectos y la confirmación correspondiente:
+
+```sh
+python -m scripts.cleanup_confluence --all-tracked-projects --apply \
+  --confirm "BORRAR https://tu-sitio.atlassian.net PROYECTOS-BD:ABC,KAN"
+```
+
+Sustituye el sitio y la lista ordenada por los valores exactos de la simulación.
+Si el inventario de proyectos cambia, la confirmación deja de ser válida.
+
+Solo después de revisar el inventario, aplica usando la confirmación exacta que
+muestra la simulación (sustituye el dominio por el sitio real):
+
+```sh
+python -m scripts.cleanup_confluence --project KAN --apply \
+  --confirm "BORRAR https://tu-sitio.atlassian.net KAN"
+```
+
 ## Datos para poblar Confluence
 
 [`mock-data/spaces.json`](./mock-data/spaces.json) define cuatro espacios:
