@@ -1,5 +1,13 @@
 # confluence-evaluator
 
+## MCP de consulta de Confluence
+
+El servidor [`scripts/confluence_mcp.py`](./scripts/confluence_mcp.py) expone
+cuatro herramientas de solo lectura por `stdio`: listar espacios, buscar páginas,
+recuperar su contenido y listar hijos directos. Usa búsqueda CQL indexada,
+paginación explícita y un cliente HTTP asíncrono con conexiones reutilizadas.
+Consulta [instalación, configuración de VS Code y contrato de herramientas](./scripts/CONFLUENCE_MCP.md).
+
 ## Limpieza de datos
 
 [`scripts/cleanup_confluence.py`](./scripts/cleanup_confluence.py) elimina solo

@@ -3,6 +3,11 @@
   "product": "Confluence Cloud",
   "spaces": [
     {
+      "key": "SQCG",
+      "name": "SQ. Cloud Governance",
+      "description": "Gobierno de recursos en la nube, responsabilidades, costos y cumplimiento."
+    },
+    {
       "key": "PREC",
       "name": "Pagao",
       "description": "Resultados de ejemplo de seguridad y calidad de Pagao: OWASP, GitHub Advanced Security y SonarCloud. Datos ficticios para demostración."
