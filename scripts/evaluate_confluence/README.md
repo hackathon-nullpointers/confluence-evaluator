@@ -13,6 +13,11 @@ puede variar según el modelo y su respuesta.
 
 ## Resumen del proceso
 
+Se excluyen los espacios personales (tipo `personal` o clave que empieza por
+`~`) y sus páginas antes de recopilar contenido, evaluar o persistir resultados.
+El resumen de ejecución indica cuántos espacios personales se excluyeron.
+Los registros históricos que ya existen en la base no se eliminan.
+
 ```mermaid
 flowchart TD
     A[Iniciar evaluación] --> B[Consultar espacios y páginas actuales]
@@ -57,13 +62,13 @@ Cada criterio produce un valor entre 0 y 100. El total se calcula con:
 
 ```text
 total_score =
-    author_exists_score * 0.10
-  + comments_score      * 0.10
+    author_exists_score * 0.05
+  + comments_score      * 0.05
   + freshness_score     * 0.15
-  + structure_score     * 0.15
+  + structure_score     * 0.35
   + likes_score         * 0.05
   + spelling_score      * 0.20
-  + links_score         * 0.25
+  + links_score         * 0.15
 ```
 
 Los pesos suman 100 %. `weighted_total` comprueba que estén presentes todos los
@@ -75,18 +80,18 @@ Ejemplo:
 
 | Criterio | Puntaje | Peso | Aporte |
 | --- | ---: | ---: | ---: |
-| Autor | 100 | 10 % | 10,00 |
-| Comentarios | 75 | 10 % | 7,50 |
+| Autor | 100 | 5 % | 5,00 |
+| Comentarios | 75 | 5 % | 3,75 |
 | Actualización | 50 | 15 % | 7,50 |
-| Estructura | 80 | 15 % | 12,00 |
+| Estructura | 80 | 35 % | 28,00 |
 | Likes | 75 | 5 % | 3,75 |
 | Ortografía | 90 | 20 % | 18,00 |
-| Enlaces | 100 | 25 % | 25,00 |
-| **Total** |  | **100 %** | **83,75** |
+| Enlaces | 100 | 15 % | 15,00 |
+| **Total** |  | **100 %** | **81,00** |
 
 ## Criterios en detalle
 
-### 1. Autor identificado — peso 10 %
+### 1. Autor identificado — peso 5 %
 
 ```text
 author_exists_score = 100 si hay author_account_id; de lo contrario, 0
@@ -98,7 +103,7 @@ Estos datos se consultan aparte mediante el endpoint de usuario de Confluence y
 se guardan como `author_display_name` y `author_email` cuando están disponibles.
 Un perfil no visible no invalida el ID ni reduce el puntaje de autor.
 
-### 2. Comentarios — peso 10 %
+### 2. Comentarios — peso 5 %
 
 El cliente obtiene comentarios de página, tanto inline como de pie de página,
 incluidas sus respuestas. Copilot evalúa cada comentario en contexto del título
@@ -121,13 +126,17 @@ positive_relevance = suma de relevancia de comentarios positivos
 negative_relevance = suma de relevancia de comentarios negativos
 
 comments_score =
-    100 * positive_relevance / (positive_relevance + negative_relevance)
+    100 * (positive_relevance + 1) / (positive_relevance + negative_relevance + 2)
 ```
 
 Si no hay relevancia positiva ni negativa (por ejemplo, no hay comentarios o
 todos son neutrales/irrelevantes), se asigna **50** como valor neutral. Así, la
 ausencia de comentarios no se interpreta ni como aprobación ni como rechazo.
 La base conserva los conteos de sentimientos y las dos sumas de relevancia.
+La fórmula incorpora evidencia neutral equivalente a dos comentarios relevantes
+para evitar que un único comentario positivo produzca 100. Un comentario positivo
+con relevancia 1 obtiene 66,67; uno negativo obtiene 33,33. La influencia de esta
+evidencia neutral disminuye al acumularse comentarios relevantes.
 
 ### 3. Fecha de actualización — peso 15 %
 
@@ -137,17 +146,17 @@ calendario, no bloques fijos de 30 días:
 
 | Antigüedad de la última actualización | Puntaje |
 | --- | ---: |
-| Menos de 3 meses | 100 |
-| Desde 3 y menos de 6 meses | 75 |
-| Desde 6 y menos de 12 meses | 50 |
-| Desde 12 y menos de 24 meses | 25 |
-| 24 meses o más | 0 |
+| Menos de 1 mes | 100 |
+| Desde 1 y menos de 3 meses | 80 |
+| Desde 3 y menos de 6 meses | 60 |
+| Desde 6 y menos de 12 meses | 30 |
+| 12 meses o más | 0 |
 
 La comparación de cada límite es estricta: una página actualizada exactamente
-hace 3 meses obtiene 75, exactamente hace 6 meses obtiene 50, y así
+hace 1 mes obtiene 80, exactamente hace 3 meses obtiene 60, y así
 sucesivamente. Una fecha futura obtiene 100.
 
-### 4. Estructura — peso 15 %
+### 4. Estructura — peso 35 %
 
 Copilot recibe el título, clave del espacio, encabezados, cantidad de listas,
 tablas, bloques de código, cantidad de palabras y texto extraído. El contenido
@@ -155,6 +164,14 @@ se limita a 24.000 caracteres; si es más extenso, se conserva el primer 75 % y
 el último 25 %.
 
 La IA asigna cinco puntajes enteros de 0 a 20:
+
+Cada dimensión usa bandas de evidencia: 0-4 ausente, 5-9 deficiente, 10-14
+parcial, 15-17 completo y 18-20 excepcional. La existencia de títulos o listas
+no demuestra cobertura. Los procedimientos deben incluir prerrequisitos,
+responsables, pasos ejecutables y criterios de cierre o validación. Los vacíos
+relevantes impiden alcanzar el nivel completo en las dimensiones afectadas.
+La rúbrica completa vive en
+[`confluence-structure-analysis`](../../.github/skills/confluence-structure-analysis/SKILL.md).
 
 | Dimensión | Qué evalúa |
 | --- | --- |
@@ -223,15 +240,18 @@ separados por comas.
 
 ```text
 spelling_score =
-    100 * (1 - spelling_errors_count / word_count)
+    max(0, 100 * (1 - 5 * spelling_errors_count / word_count))
 ```
 
 El puntaje mínimo es 0 y no puede ser negativo. Cada aparición de una palabra
 desconocida cuenta como error, incluso si se repite. Si no hay palabras que
 evaluar, el puntaje es 100. `word_count` y `spelling_errors_count` se guardan
 como evidencia del cálculo.
+Una tasa de errores del 5 % obtiene 75; del 10 %, 50; del 20 % o más, 0.
+La lista de términos permitidos debe revisarse para evitar penalizar vocabulario
+técnico válido; el corrector sigue usando español.
 
-### 7. Enlaces válidos — peso 25 %
+### 7. Enlaces válidos — peso 15 %
 
 Se extraen enlaces de Confluence Storage y Atlas Doc Format. Las referencias
 relativas se resuelven respecto a la URL de la página. Se ignoran fragmentos
@@ -247,20 +267,18 @@ errores transitorios y destinos no verificables se contabilizan como no
 comprobados (`unchecked`), no como enlaces rotos.
 
 ```text
-checked = valid_links_count + invalid_links_count
+total = valid_links_count + invalid_links_count + unchecked_links_count
 
-si checked > 0:
-    links_score = 100 * valid_links_count / checked
-si checked = 0 y no hay enlaces unchecked:
-    links_score = 100
-si checked = 0 y hay enlaces unchecked:
+si total > 0:
+    links_score = 100 * valid_links_count / total
+si total = 0:
     links_score = 50
 ```
 
-Los enlaces `unchecked` no entran en el denominador cuando hay enlaces
-comprobados. Por eso se deben interpretar junto con `links_score` y los tres
-conteos; una proporción alta de enlaces no comprobados deja menos evidencia
-para el puntaje.
+Los enlaces `unchecked` entran en el denominador pero no cuentan como evidencia
+válida. No se etiquetan como rotos: se conservan los tres conteos para distinguir
+ausencia de verificación y fallas confirmadas. Sin enlaces se asigna 50, sin
+depender del tipo documental.
 
 ## Lectura y preparación de contenido
 
@@ -310,6 +328,9 @@ umbrales, rúbricas o fórmulas, debe actualizarse `SCORING_VERSION`; si cambia
 la instrucción enviada a Copilot (el agente o sus skills en `.github/`), debe
 actualizarse `PROMPT_VERSION`. Esto
 permite interpretar los puntajes históricos con la versión que los generó.
+Las reglas más exigentes usan `SCORING_VERSION = v2` y la rúbrica estructural
+usa `PROMPT_VERSION = v3`. Los resultados anteriores no se recalculan
+automáticamente.
 
 ## Mapa de implementación
 

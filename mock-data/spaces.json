@@ -3,24 +3,24 @@
   "product": "Confluence Cloud",
   "spaces": [
     {
-      "key": "ARQ",
-      "name": "Arquitectura",
-      "description": "Arquitectura de soluciones, plataformas y decisiones técnicas."
+      "key": "SQCG",
+      "name": "SQ. Cloud Governance",
+      "description": "Gobierno de recursos en la nube, responsabilidades, costos y cumplimiento."
     },
     {
-      "key": "GJIRA",
-      "name": "Gobierno Jira",
-      "description": "Estándares, configuración y gobierno de Jira."
+      "key": "COESEC",
+      "name": "COE de Seguridad",
+      "description": "Centro de excelencia de seguridad: controles, revisiones y gestión de excepciones."
     },
     {
-      "key": "DSEC",
-      "name": "DevSecOps",
-      "description": "Prácticas de seguridad integradas al ciclo de desarrollo."
+      "key": "ATLAS",
+      "name": "ATLAS",
+      "description": "Catálogo de servicios, contratos de integración y decisiones de la plataforma ATLAS."
     },
     {
-      "key": "TEST",
-      "name": "Testing",
-      "description": "Estrategia, automatización y evidencias de pruebas."
+      "key": "SREF",
+      "name": "SRE - SITE RELIABILITY ENGINEERING FRAMEWORK",
+      "description": "Marco de confiabilidad: objetivos de servicio, respuesta a incidentes y mejora operativa."
     }
   ]
 }

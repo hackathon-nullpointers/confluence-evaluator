@@ -214,13 +214,30 @@ class EvaluationService:
         api = self.confluence_factory(self.settings)
         try:
             spaces = api.get_spaces()
+            personal_space_ids = {
+                str(space["id"])
+                for space in spaces
+                if "id" in space
+                and (
+                    space.get("type") == "personal"
+                    or str(space.get("key", "")).startswith("~")
+                )
+            }
+            spaces = [
+                space for space in spaces
+                if str(space.get("id", "")) not in personal_space_ids
+            ]
             spaces_by_id = {
                 str(space["id"]): space for space in spaces if "id" in space
             }
-            pages = api.get_pages()
+            pages = [
+                page for page in api.get_pages()
+                if str(page.get("spaceId", "")) not in personal_space_ids
+            ]
             print(
-                f"Confluence: {len(spaces_by_id)} espacios visibles, "
-                f"{len(pages)} páginas actuales."
+                f"Confluence: {len(spaces_by_id)} espacios no personales, "
+                f"{len(pages)} páginas actuales; "
+                f"{len(personal_space_ids)} espacios personales excluidos."
             )
 
             work = collect_page_work(

@@ -63,6 +63,44 @@ def test_settings() -> Settings:
 
 
 class EvaluationScoringTests(unittest.TestCase):
+    def test_run_excludes_personal_spaces_and_their_pages(self) -> None:
+        api = Mock()
+        shared = {"id": "1", "key": "ARQ", "type": "global"}
+        api.get_spaces.return_value = [
+            shared,
+            {"id": "2", "key": "personal", "type": "personal"},
+            {"id": "3", "key": "~user"},
+        ]
+        shared_page = {"id": "10", "spaceId": "1"}
+        api.get_pages.return_value = [
+            shared_page,
+            {"id": "20", "spaceId": "2"},
+            {"id": "30", "spaceId": "3"},
+        ]
+        service = EvaluationService(
+            test_settings(),
+            confluence_factory=Mock(return_value=api),
+            spell_checker_factory=Mock(),
+        )
+        with (
+            patch(
+                "scripts.evaluate_confluence.service.collect_page_work",
+                return_value=[],
+            ) as collect,
+            patch(
+                "scripts.evaluate_confluence.service.analyze_pages",
+                new_callable=AsyncMock,
+            ),
+            patch.object(service, "_persist") as persist,
+            patch.object(service, "_publish_jira_issues", return_value=0),
+        ):
+            self.assertEqual(service.run(), 0)
+
+        self.assertEqual(collect.call_args.args[1], [shared_page])
+        self.assertEqual(collect.call_args.args[2], {"1": shared})
+        persist.assert_called_once_with([shared], [])
+        api.close.assert_called_once_with()
+
     def test_headless_run_defaults_to_verified_copilot_model(self) -> None:
         environment = {
             "ATLASSIAN_EMAIL": "evaluator@example.com",
@@ -85,15 +123,15 @@ class EvaluationScoringTests(unittest.TestCase):
 
     def test_freshness_uses_strict_calendar_month_boundaries(self) -> None:
         as_of = datetime(2025, 6, 30, tzinfo=UTC)
-        expected = ((3, 75), (6, 50), (12, 25), (24, 0))
+        expected = ((1, 80, 100), (3, 60, 80), (6, 30, 60), (12, 0, 30))
 
-        for months, boundary_score in expected:
+        for months, boundary_score, newer_score in expected:
             with self.subTest(months=months):
                 boundary = subtract_calendar_months(as_of, months)
                 self.assertEqual(freshness_score(boundary, as_of), boundary_score)
                 self.assertEqual(
                     freshness_score(boundary + timedelta(microseconds=1), as_of),
-                    min(100, boundary_score + 25),
+                    newer_score,
                 )
 
     def test_weighted_total_applies_all_criteria_and_weights(self) -> None:
@@ -101,7 +139,7 @@ class EvaluationScoringTests(unittest.TestCase):
         self.assertEqual(weighted_total(scores), 100.0)
 
         scores["links_score"] = 0.0
-        self.assertEqual(weighted_total(scores), 75.0)
+        self.assertEqual(weighted_total(scores), 85.0)
 
     def test_weighted_total_rejects_missing_or_out_of_range_scores(self) -> None:
         with self.assertRaisesRegex(EvaluationError, "Faltan puntajes"):
@@ -115,11 +153,17 @@ class EvaluationScoringTests(unittest.TestCase):
             )
 
     def test_comment_score_weights_relevance_and_has_neutral_fallback(self) -> None:
-        self.assertEqual(comment_score(3.0, 1.0), 75.0)
+        self.assertAlmostEqual(comment_score(3.0, 1.0), 100 * 4 / 6)
         self.assertEqual(comment_score(0.0, 0.0), 50.0)
+        self.assertAlmostEqual(comment_score(1.0, 0.0), 100 * 2 / 3)
+        self.assertAlmostEqual(comment_score(0.0, 1.0), 100 / 3)
+        self.assertGreater(comment_score(10.0, 0.0), comment_score(1.0, 0.0))
 
     def test_spelling_score_reduces_proportionally(self) -> None:
-        self.assertEqual(spelling_score(100, 5), 95.0)
+        self.assertEqual(spelling_score(100, 5), 75.0)
+        self.assertEqual(spelling_score(100, 10), 50.0)
+        self.assertEqual(spelling_score(100, 30), 0.0)
+        self.assertEqual(spelling_score(100, 0), 100.0)
         self.assertEqual(spelling_score(0, 0), 100.0)
 
     def test_likes_percentile_averages_tied_ranks(self) -> None:
@@ -523,10 +567,12 @@ class EvaluationScoringTests(unittest.TestCase):
             ],
         )
 
-    def test_links_score_excludes_unchecked_links(self) -> None:
-        self.assertEqual(links_score(3, 1, 10), 75.0)
-        self.assertEqual(links_score(0, 0, 0), 100.0)
-        self.assertEqual(links_score(0, 0, 2), 50.0)
+    def test_links_score_requires_verified_links(self) -> None:
+        self.assertAlmostEqual(links_score(3, 1, 10), 100 * 3 / 14)
+        self.assertEqual(links_score(0, 0, 0), 50.0)
+        self.assertEqual(links_score(0, 0, 2), 0.0)
+        self.assertEqual(links_score(2, 0, 0), 100.0)
+        self.assertEqual(links_score(0, 2, 0), 0.0)
 
     def test_user_lookup_caches_profile_and_uses_account_id_endpoint(self) -> None:
         profile = {

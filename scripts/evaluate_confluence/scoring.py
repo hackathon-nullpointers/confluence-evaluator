@@ -40,14 +40,14 @@ def subtract_calendar_months(value: datetime, months: int) -> datetime:
 def freshness_score(updated_at: datetime, as_of: datetime) -> int:
     updated = updated_at.astimezone(UTC) if updated_at.tzinfo else updated_at.replace(tzinfo=UTC)
     current = as_of.astimezone(UTC) if as_of.tzinfo else as_of.replace(tzinfo=UTC)
-    if updated > subtract_calendar_months(current, 3):
+    if updated > subtract_calendar_months(current, 1):
         return 100
+    if updated > subtract_calendar_months(current, 3):
+        return 80
     if updated > subtract_calendar_months(current, 6):
-        return 75
+        return 60
     if updated > subtract_calendar_months(current, 12):
-        return 50
-    if updated > subtract_calendar_months(current, 24):
-        return 25
+        return 30
     return 0
 
 def spelling_counts(text: str, spell_checker: SpellChecker) -> tuple[int, int]:
@@ -60,19 +60,18 @@ def spelling_counts(text: str, spell_checker: SpellChecker) -> tuple[int, int]:
 def spelling_score(word_count: int, error_count: int) -> float:
     if word_count <= 0:
         return 100.0
-    return max(0.0, 100.0 * (1.0 - error_count / word_count))
+    return max(0.0, 100.0 * (1.0 - 5 * error_count / word_count))
 
 def comment_score(positive_relevance: float, negative_relevance: float) -> float:
-    total = positive_relevance + negative_relevance
-    if total <= 0:
-        return 50.0
-    return 100.0 * positive_relevance / total
+    return 100.0 * (positive_relevance + 1) / (
+        positive_relevance + negative_relevance + 2
+    )
 
 def links_score(valid_count: int, invalid_count: int, unchecked_count: int) -> float:
-    checked = valid_count + invalid_count
-    if checked:
-        return 100.0 * valid_count / checked
-    return 100.0 if unchecked_count == 0 else 50.0
+    total = valid_count + invalid_count + unchecked_count
+    if total:
+        return 100.0 * valid_count / total
+    return 50.0
 
 def comment_metrics(classifications: dict[int, tuple[str, float]]) -> dict[str, Any]:
     counts = Counter(sentiment for sentiment, _ in classifications.values())

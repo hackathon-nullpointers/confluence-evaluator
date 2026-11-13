@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v3"
 
-SCORING_VERSION = "v1"
+SCORING_VERSION = "v2"
 
 COPILOT_MODEL_DEFAULT = "gpt-4.1"
 
@@ -24,13 +24,13 @@ MAX_REDIRECTS = 5
 MIN_PEER_GROUP_SIZE = 5
 
 WEIGHTS = {
-    "author_exists_score": 10,
-    "comments_score": 10,
+    "author_exists_score": 5,
+    "comments_score": 5,
     "freshness_score": 15,
-    "structure_score": 15,
+    "structure_score": 35,
     "likes_score": 5,
     "spelling_score": 20,
-    "links_score": 25,
+    "links_score": 15,
 }
 
 DOMAINS = {

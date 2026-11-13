@@ -36,6 +36,34 @@ puntajes evalúan, respectivamente:
 
 No penalices la ausencia de tablas si no son necesarias.
 
+### Niveles de exigencia
+
+Aplica estas bandas a cada dimensión, basándote únicamente en evidencia del
+contenido. No asumas que una sección está completa solo porque tenga título.
+
+| Puntaje | Nivel | Evidencia |
+| --- | --- | --- |
+| 0-4 | Ausente | No hay evidencia útil o la organización impide comprender el documento. |
+| 5-9 | Deficiente | Hay fragmentos, vacíos importantes, contradicciones o marcadores pendientes. |
+| 10-14 | Parcial | El contenido es comprensible, pero faltan detalles necesarios para usarlo. |
+| 15-17 | Completo | Cubre el propósito y permite su uso sin suposiciones relevantes. |
+| 18-20 | Excepcional | Además de completo, es preciso, verificable y consistente en toda la dimensión. |
+
+- En `section_coverage`, exige propósito, alcance y contenido suficiente para
+  el tipo documental. Un procedimiento debe incluir prerrequisitos, responsables,
+  pasos ejecutables y criterios de cierre o validación. Una decisión debe explicar
+  contexto, alternativas, decisión y consecuencias. No exijas secciones irrelevantes.
+- En `logical_flow`, comprueba dependencias y secuencia; no concedas notas altas
+  a pasos vagos como "revisar después" o a referencias que no explican cómo avanzar.
+- En `heading_hierarchy`, evalúa si los títulos describen el contenido y mantienen
+  niveles coherentes, no solo si existen encabezados.
+- En `scannability` y `format_consistency`, exige claridad sostenida; una lista
+  aislada o una tabla no justifican por sí solas una nota alta.
+- Los vacíos relevantes y pendientes sin resolver impiden alcanzar el nivel
+  completo en las dimensiones afectadas. No penalices otras dimensiones sin evidencia.
+- No premies longitud, actualidad, autor, likes ni comentarios en esta rúbrica:
+  esos aspectos no demuestran calidad estructural.
+
 ## Clasificación
 
 Clasifica `domain` y `document_type` con exactamente una de las opciones
