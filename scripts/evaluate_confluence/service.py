@@ -11,6 +11,7 @@ from typing import Any
 from spellchecker import SpellChecker
 
 from .config import EvaluationError, Settings
+from .constants import JIRA_SCORE_THRESHOLD
 from .confluence import ConfluenceClient
 from .copilot import CopilotEvaluator
 from .database import EvaluationDatabase
@@ -181,7 +182,7 @@ async def analyze_pages(
 
         prepare_scores(pages, as_of or datetime.now(UTC))
         for page in pages:
-            if page["failure"] or page["total_score"] >= 75:
+            if page["failure"] or page["total_score"] > JIRA_SCORE_THRESHOLD:
                 continue
             try:
                 page["evaluation_feedback"] = await evaluator.explain_evaluation(page)
@@ -324,7 +325,7 @@ class EvaluationService:
             for page in pages
             if (
                 not page["failure"]
-                and page["total_score"] < 75
+                and page["total_score"] <= JIRA_SCORE_THRESHOLD
                 and page.get("evaluation_feedback")
             )
         ]

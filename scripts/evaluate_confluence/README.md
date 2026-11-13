@@ -51,12 +51,12 @@ flowchart TD
     I -- No --> J[Asignar grupo comparable de likes]
     J --> K[Calcular percentil de likes y los 7 puntajes]
     K --> L[Aplicar pesos y obtener total de 0 a 100]
-    L --> M{¿Puntaje menor que 75?}
+    L --> M{¿Puntaje menor o igual a 80?}
     M -- Sí --> N[Copilot explica el resultado y recomienda mejoras]
     M -- No --> O[No requiere ticket Jira]
     N --> P[Mostrar resultado y persistir evaluación]
     O --> P
-    P --> Q[En ejecución normal: Task para resultados bajo 75 con feedback válido]
+    P --> Q[En ejecución normal: Task para resultados hasta 80 con feedback válido]
     X --> P
 ```
 
@@ -72,7 +72,7 @@ de las que no fallaron, calcular los grupos y puntajes, generar feedback para
 resultados bajos, imprimir el reporte, persistir y finalmente sincronizar Jira.
 No se ejecutan evaluaciones de páginas en paralelo.
 
-Para páginas con puntaje menor que 75, Copilot genera una explicación basada en
+Para páginas con puntaje menor o igual a 80, Copilot genera una explicación basada en
 los criterios, pesos y mediciones, además de insights y recomendaciones concretas.
 En ejecución normal, cada página bajo el umbral genera un `Task` en el proyecto
 configurado por `JIRA_PROJECT_KEY`. Una etiqueta con el ID de página y la fecha hace que una
@@ -114,8 +114,10 @@ Ejemplo:
 | Enlaces | 100 | 15 % | 15,00 |
 | **Total** |  | **100 %** | **82,50** |
 
-El umbral operativo es **menor que 75**, no menor o igual: una página con 75
-no genera feedback ni ticket. Se compara el total ya redondeado a dos decimales.
+El umbral operativo es **menor o igual a 80**: una página con 80 genera feedback
+y puede generar ticket; una con 80,01 no. Se compara el total ya redondeado a dos decimales.
+El límite compartido se define en `JIRA_SCORE_THRESHOLD` en
+[`constants.py`](./constants.py).
 Ese umbral no altera la fórmula ni representa una certificación de calidad.
 
 ## Criterios en detalle
@@ -380,7 +382,7 @@ herramientas para que el agente pueda cargar la skill; el contenido recibido se
 trata como dato no confiable. Se valida que la respuesta sea JSON con categorías,
 índices y campos permitidos.
 
-Para páginas bajo 75, el servicio solicita además la explicación del puntaje y
+Para páginas con puntaje hasta 80 inclusive, el servicio solicita además la explicación del puntaje y
 recomendaciones.
 El payload de feedback incluye la nota, los siete puntajes, pesos, dimensiones
 estructurales, clasificación, mediciones y texto limitado. El modelo no
@@ -395,7 +397,7 @@ en el contenido no equivalen a aislamiento de ejecución.
 
 Sin contar las llamadas internas para usar skills, se realiza una solicitud de
 estructura por página recopilada con éxito, una por lote de comentarios y una
-de feedback por página evaluada con éxito bajo 75. No hay reintento ni cambio automático de modelo
+de feedback por página evaluada con éxito con puntaje menor o igual a 80. No hay reintento ni cambio automático de modelo
 implementado para errores o límites de Copilot.
 
 La respuesta debe ser un objeto JSON; se tolera un bloque Markdown envolvente.
@@ -448,7 +450,7 @@ La persistencia inicial se realiza en una transacción e incluye:
 | `confluence_spaces` | Upsert por ID de Confluence; actualiza clave, nombre y estado. |
 | `confluence_pages` | Upsert por ID de Confluence; actualiza espacio, título, URL y estado. |
 | `page_evaluations` | Upsert por página y fecha lógica; guarda mediciones, siete puntajes, total, estado, error, modelo y versiones. |
-| `jira_evaluation_issues` | Una trazabilidad por evaluación bajo 75; conserva feedback y estado de sincronización. |
+| `jira_evaluation_issues` | Una trazabilidad por evaluación con puntaje menor o igual a 80; conserva feedback y estado de sincronización. |
 
 Cambiar un título o nombre no crea otra identidad. Las evaluaciones no guardan
 una copia histórica del título: al unirlas con las páginas muestran el título
@@ -458,7 +460,7 @@ de todo el análisis estructural.
 
 El resultado se guarda en `page_evaluations`, una fila por página y
 `evaluation_date`. Si se vuelve a ejecutar en la misma fecha, el proceso
-actualiza la fila existente. Para cada página bajo 75, `jira_evaluation_issues`
+actualiza la fila existente. Para cada página con puntaje menor o igual a 80, `jira_evaluation_issues`
 guarda el snapshot del feedback, el proyecto, la clave/URL del issue, el estado
 de sincronización, los intentos, las fechas y el último error. Consulta
 [`../../db/README.md`](../../db/README.md) para el detalle de las tablas y
@@ -477,7 +479,7 @@ escribe en PostgreSQL ni en Jira.
 
 ### Sincronización Jira
 
-- Solo se publican páginas evaluadas con éxito, total menor que 75 y feedback
+- Solo se publican páginas evaluadas con éxito, total menor o igual a 80 y feedback
   válido. Si falla el feedback, la evaluación permanece `completed` con su nota,
   pero la trazabilidad Jira registra el fallo.
 - Antes de crear se busca por proyecto y etiqueta
@@ -495,7 +497,7 @@ escribe en PostgreSQL ni en Jira.
 - Jira se sincroniza después de confirmar la persistencia inicial. No hay una
   transacción distribuida entre Jira y PostgreSQL ni reintento automático de
   solicitudes Jira; una reejecución vuelve a buscar por la etiqueta.
-- Si una página sube a 75 o más, el script no cierra ni elimina tickets anteriores
+- Si una página supera 80, el script no cierra ni elimina tickets anteriores
   y no elimina su trazabilidad previa.
 
 ### Códigos de salida y diagnóstico
@@ -550,7 +552,7 @@ Configura o exporta las variables antes de ejecutar.
 | `EVALUATION_DATE` | Fecha lógica `YYYY-MM-DD`; por defecto el día actual UTC. No cambia la antigüedad calculada. |
 | `SPELLING_ALLOWLIST` | Términos adicionales separados por comas para el corrector español. |
 
-Los pesos, ventanas de vigencia, umbral de 75, límites de contenido y timeout
+Los pesos, ventanas de vigencia, umbral de 80 inclusive, límites de contenido y timeout
 de Copilot no se configuran mediante estas variables; están definidos en el
 código y las skills.
 

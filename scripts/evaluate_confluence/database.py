@@ -9,7 +9,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from .config import EvaluationError
-from .constants import PROMPT_VERSION, SCORING_VERSION
+from .constants import JIRA_SCORE_THRESHOLD, PROMPT_VERSION, SCORING_VERSION
 from .scoring import weighted_total
 
 
@@ -215,7 +215,7 @@ class EvaluationDatabase:
                             f"{page['page_id']}."
                         )
 
-                    if succeeded and page["total_score"] < 75:
+                    if succeeded and page["total_score"] <= JIRA_SCORE_THRESHOLD:
                         feedback = page.get("evaluation_feedback")
                         feedback_failure = page.get("feedback_failure")
                         if feedback:

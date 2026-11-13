@@ -44,6 +44,7 @@ from scripts.evaluate_confluence.scoring import (
 )
 from scripts.evaluate_confluence.service import (
     EvaluationService,
+    analyze_pages,
     collect_page_work,
 )
 
@@ -318,7 +319,7 @@ class EvaluationScoringTests(unittest.TestCase):
                 "page_id": "low",
                 "title": "Bajo",
                 "space_key": "DSEC",
-                "total_score": 74.99,
+                "total_score": 80.0,
                 "failure": None,
                 "evaluation_feedback": {
                     "evaluation_reason": "Puntaje bajo.",
@@ -326,7 +327,7 @@ class EvaluationScoringTests(unittest.TestCase):
                     "recommendations": ["Agregar fuentes vigentes."],
                 },
             },
-            {"page_id": "at-limit", "title": "Límite", "space_key": "DSEC", "total_score": 75.0, "failure": None},
+            {"page_id": "above-limit", "title": "Superior", "space_key": "DSEC", "total_score": 80.01, "failure": None, "evaluation_feedback": {"evaluation_reason": "No publicar"}},
             {"page_id": "failed", "title": "Fallida", "space_key": "DSEC", "total_score": 20.0, "failure": "Error"},
         ]
 
@@ -412,8 +413,8 @@ class EvaluationScoringTests(unittest.TestCase):
             "invalid_links_count": 2,
             "unchecked_links_count": 0,
             "comparison_group": "global",
-            "scores": {criterion: 50.0 for criterion in WEIGHTS},
-            "total_score": 50.0,
+            "scores": {criterion: 80.0 for criterion in WEIGHTS},
+            "total_score": 80.0,
             "comment_metrics": {},
             "evaluation_feedback": feedback,
         }
@@ -685,6 +686,24 @@ class EvaluationScoringTests(unittest.TestCase):
 
 
 class CopilotAgentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_feedback_includes_threshold_but_excludes_higher_scores(self) -> None:
+        evaluator = MagicMock()
+        evaluator.__aenter__ = AsyncMock(return_value=evaluator)
+        evaluator.__aexit__ = AsyncMock(return_value=None)
+        evaluator.analyze_structure = AsyncMock(return_value={})
+        evaluator.classify_comments = AsyncMock(return_value={})
+        evaluator.explain_evaluation = AsyncMock(return_value={"evaluation_reason": "Mejorar"})
+        pages = [
+            {"failure": None, "title": "Límite", "comments": [], "total_score": 80.0},
+            {"failure": None, "title": "Superior", "comments": [], "total_score": 80.01},
+        ]
+        with patch("scripts.evaluate_confluence.service.prepare_scores"):
+            await analyze_pages(pages, "token", "model", Mock(return_value=evaluator))
+
+        evaluator.explain_evaluation.assert_awaited_once_with(pages[0])
+        self.assertIn("evaluation_feedback", pages[0])
+        self.assertNotIn("evaluation_feedback", pages[1])
+
     def test_agent_config_loads_prompt_and_skills(self) -> None:
         agent = load_agent_config()
 
