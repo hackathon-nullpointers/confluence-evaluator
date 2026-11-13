@@ -81,6 +81,9 @@ class EvaluationScoringTests(unittest.TestCase):
         service = EvaluationService(
             test_settings(),
             confluence_factory=Mock(return_value=api),
+            repository_factory=Mock(
+                return_value=Mock(completed_page_ids=Mock(return_value=set()))
+            ),
             spell_checker_factory=Mock(),
         )
         with (
@@ -100,6 +103,67 @@ class EvaluationScoringTests(unittest.TestCase):
         self.assertEqual(collect.call_args.args[1], [shared_page])
         self.assertEqual(collect.call_args.args[2], {"1": shared})
         persist.assert_called_once_with([shared], [])
+        api.close.assert_called_once_with()
+
+    def test_completed_page_ids_only_queries_completed_for_requested_date(self) -> None:
+        database = object.__new__(EvaluationDatabase)
+        database.connection = MagicMock()
+        cursor = database.connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = [("123",), ("456",)]
+        day = date(2026, 11, 13)
+
+        self.assertEqual(database.completed_page_ids(day), {"123", "456"})
+        query, parameters = cursor.execute.call_args.args
+        self.assertIn("evaluation.evaluation_status = 'completed'", query)
+        self.assertIn("evaluation.evaluation_date = %s", query)
+        self.assertEqual(parameters, (day,))
+
+    def test_run_skips_completed_pages_before_collecting(self) -> None:
+        api = Mock()
+        api.get_spaces.return_value = [{"id": "1", "key": "ARQ"}]
+        api.get_pages.return_value = [
+            {"id": "done", "spaceId": "1"},
+            {"id": "new", "spaceId": "1"},
+            {"id": "retry-failed", "spaceId": "1"},
+        ]
+        database = Mock()
+        database.completed_page_ids.return_value = {"done"}
+        service = EvaluationService(
+            test_settings(), confluence_factory=Mock(return_value=api),
+            repository_factory=Mock(return_value=database),
+            spell_checker_factory=Mock(),
+        )
+        with (
+            patch("scripts.evaluate_confluence.service.collect_page_work",
+                  return_value=[]) as collect,
+            patch("scripts.evaluate_confluence.service.analyze_pages",
+                  new_callable=AsyncMock),
+            patch.object(service, "_persist"),
+            patch.object(service, "_publish_jira_issues", return_value=0),
+        ):
+            self.assertEqual(service.run(), 0)
+        self.assertEqual(
+            [page["id"] for page in collect.call_args.args[1]], ["new", "retry-failed"]
+        )
+        database.completed_page_ids.assert_called_once_with(date(2026, 11, 13))
+        database.close.assert_called_once_with()
+
+    def test_run_does_not_evaluate_or_write_when_all_pages_completed(self) -> None:
+        api = Mock()
+        api.get_spaces.return_value = [{"id": "1", "key": "ARQ"}]
+        api.get_pages.return_value = [{"id": "done", "spaceId": "1"}]
+        database = Mock()
+        database.completed_page_ids.return_value = {"done"}
+        evaluator_factory = Mock()
+        service = EvaluationService(
+            test_settings(), confluence_factory=Mock(return_value=api),
+            repository_factory=Mock(return_value=database),
+            evaluator_factory=evaluator_factory,
+        )
+        self.assertEqual(service.run(), 0)
+        evaluator_factory.assert_not_called()
+        database.persist.assert_not_called()
+        api.get_page_detail.assert_not_called()
         api.close.assert_called_once_with()
 
     def test_headless_run_defaults_to_verified_copilot_model(self) -> None:

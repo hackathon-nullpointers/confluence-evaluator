@@ -43,6 +43,8 @@ class PageAnalyzer(Protocol):
 class EvaluationRepository(Protocol):
     def close(self) -> None: ...
 
+    def completed_page_ids(self, evaluation_date: date) -> set[str]: ...
+
     def persist(
         self,
         spaces: list[dict[str, Any]],

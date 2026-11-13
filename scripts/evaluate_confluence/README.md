@@ -35,11 +35,33 @@ Se excluyen los espacios personales (tipo `personal` o clave que empieza por
 El resumen de ejecución indica cuántos espacios personales se excluyeron.
 Los registros históricos que ya existen en la base no se eliminan.
 
+### Una evaluación completada por página y día
+
+Antes de consultar contenido, comentarios, likes o enlaces, se leen de PostgreSQL
+los IDs con `evaluation_status = 'completed'` para `EVALUATION_DATE` (por defecto
+el día actual UTC). Esas páginas se omiten aunque hayan cambiado de contenido,
+título, modelo o reglas durante el mismo día. Las páginas nuevas y las que
+tengan evaluación `failed` sí se procesan. Al día siguiente vuelven a ser elegibles.
+
+Las páginas omitidas no llaman a Copilot ni actualizan evaluaciones o tickets
+Jira. Si falló el feedback o Jira pero la evaluación numérica quedó `completed`,
+tampoco se reintenta automáticamente esa sincronización durante el mismo día.
+Si no quedan páginas pendientes, se termina con código 0 sin persistir.
+Los grupos de likes se calculan solo con las páginas procesadas en esa ejecución;
+no se incorporan las evaluaciones ya completadas del día.
+
+En `--dry-run`, si hay `DATABASE_URL`, se aplica el mismo filtro mediante lectura.
+Sin esa variable, se avisa que no se pueden detectar duplicados y se simulan
+todas las páginas elegibles. Un fallo de conexión a una base configurada aborta
+la ejecución; no se ignora. El filtro no reserva páginas entre procesos: evita
+ejecuciones simultáneas fuera del control de concurrencia de Actions.
+
 ```mermaid
 flowchart TD
     A[Iniciar evaluación] --> B[Consultar espacios y páginas actuales]
     B --> B1[Excluir espacios personales y sus páginas]
-    B1 --> C[Por cada página: recopilar autor, versión y contenido]
+    B1 --> B2[Omitir páginas completed de la fecha lógica]
+    B2 --> C[Por cada página pendiente: recopilar autor, versión y contenido]
     C --> D[Extraer texto, estructura y enlaces]
     D --> E[Obtener comentarios, likes, ortografía y estado de enlaces]
     E --> F{¿Falló la recopilación?}
@@ -76,7 +98,8 @@ Para páginas con puntaje menor o igual a 80, Copilot genera una explicación ba
 los criterios, pesos y mediciones, además de insights y recomendaciones concretas.
 En ejecución normal, cada página bajo el umbral genera un `Task` en el proyecto
 configurado por `JIRA_PROJECT_KEY`. Una etiqueta con el ID de página y la fecha hace que una
-reejecución actualice el mismo issue en vez de duplicarlo. Si Jira falla para
+publicación repetida actualice el mismo issue en vez de duplicarlo. Una
+reejecución normal omite las evaluaciones ya completadas. Si Jira falla para
 una página, se reporta el error, se continúa con las demás y la ejecución termina
 con código de error. `--dry-run` genera el feedback, pero no escribe en PostgreSQL
 ni en Jira.
@@ -459,8 +482,9 @@ se persiste el total estructural y el grupo comparable, no un registro separado
 de todo el análisis estructural.
 
 El resultado se guarda en `page_evaluations`, una fila por página y
-`evaluation_date`. Si se vuelve a ejecutar en la misma fecha, el proceso
-actualiza la fila existente. Para cada página con puntaje menor o igual a 80, `jira_evaluation_issues`
+`evaluation_date`. Si se reintenta una evaluación fallida en la misma fecha,
+se actualiza la fila existente; las completadas se omiten antes del análisis.
+Para cada página con puntaje menor o igual a 80, `jira_evaluation_issues`
 guarda el snapshot del feedback, el proyecto, la clave/URL del issue, el estado
 de sincronización, los intentos, las fechas y el último error. Consulta
 [`../../db/README.md`](../../db/README.md) para el detalle de las tablas y
@@ -496,7 +520,8 @@ escribe en PostgreSQL ni en Jira.
   fechas y último error.
 - Jira se sincroniza después de confirmar la persistencia inicial. No hay una
   transacción distribuida entre Jira y PostgreSQL ni reintento automático de
-  solicitudes Jira; una reejecución vuelve a buscar por la etiqueta.
+  solicitudes Jira. Las evaluaciones `completed` se omiten en reejecuciones del
+  mismo día, incluso si su sincronización Jira falló.
 - Si una página supera 80, el script no cierra ni elimina tickets anteriores
   y no elimina su trazabilidad previa.
 
@@ -545,7 +570,7 @@ Configura o exporta las variables antes de ejecutar.
 | `ATLASSIAN_EMAIL` | Obligatoria; cuenta usada para Confluence y Jira. |
 | `ATLASSIAN_API_TOKEN` | Obligatoria; permisos de lectura en Confluence y de búsqueda, creación y edición de issues en Jira para ejecución normal. |
 | `COPILOT_GITHUB_TOKEN` | Token de usuario aceptado por Copilot. Si falta se intenta `GH_TOKEN`, después `GITHUB_TOKEN`; un token automático de Actions no garantiza acceso a Copilot. |
-| `DATABASE_URL` | Obligatoria salvo en `--dry-run`; conexión PostgreSQL. |
+| `DATABASE_URL` | Obligatoria salvo en `--dry-run`; conexión PostgreSQL, también usada para omitir evaluaciones completadas del día. |
 | `CONFLUENCE_BASE_URL` | Por defecto `https://bcphackaton.atlassian.net`. Acepta el dominio HTTPS o terminaciones `/wiki` y `/wiki/home`; no admite credenciales, query ni fragmento. Jira usa el mismo sitio. |
 | `COPILOT_MODEL` | Por defecto local `gpt-4.1`; permite seleccionar otro modelo accesible por la cuenta, incluido `auto` si está disponible. |
 | `JIRA_PROJECT_KEY` | Por defecto `KAN`; debe comenzar por letra mayúscula y contener solo mayúsculas, dígitos o `_`. |

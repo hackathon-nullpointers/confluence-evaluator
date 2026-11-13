@@ -241,6 +241,28 @@ class EvaluationService:
                 f"{len(personal_space_ids)} espacios personales excluidos."
             )
 
+            if self.settings.database_url:
+                database = self.repository_factory(self.settings.database_url)
+                try:
+                    completed = database.completed_page_ids(self.settings.evaluation_date)
+                finally:
+                    database.close()
+                pending = [page for page in pages if str(page.get("id", "")) not in completed]
+                print(
+                    f"Omitidas {len(pages) - len(pending)} páginas ya evaluadas para "
+                    f"{self.settings.evaluation_date}; pendientes: {len(pending)}."
+                )
+                pages = pending
+            else:
+                print(
+                    "Advertencia: dry-run sin DATABASE_URL; no se puede comprobar "
+                    "si las páginas ya fueron evaluadas.",
+                    file=sys.stderr,
+                )
+            if not pages:
+                print("No hay páginas pendientes de evaluación.")
+                return 0
+
             work = collect_page_work(
                 api,
                 pages,

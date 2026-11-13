@@ -20,6 +20,20 @@ class EvaluationDatabase:
     def close(self) -> None:
         self.connection.close()
 
+    def completed_page_ids(self, evaluation_date: date) -> set[str]:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT page.confluence_page_id
+                FROM page_evaluations AS evaluation
+                JOIN confluence_pages AS page ON page.id = evaluation.page_id
+                WHERE evaluation.evaluation_date = %s
+                    AND evaluation.evaluation_status = 'completed'
+                """,
+                (evaluation_date,),
+            )
+            return {str(row[0]) for row in cursor.fetchall()}
+
     def persist(
         self,
         spaces: list[dict[str, Any]],
