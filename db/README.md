@@ -60,11 +60,16 @@ Los campos de medición conservan la evidencia numérica básica; los campos
 | `evaluated_at` | Instante en que se ejecutó la evaluación. |
 | `author_account_id` | ID de cuenta del autor observado. |
 | `author_exists` | Si el autor existe en Confluence. |
-| `positive_comments_count`, `negative_comments_count` | Conteos de comentarios por sentimiento. |
+| `comments_analyzed_count` | Total de comentarios procesados por IA. |
+| `positive_comments_count`, `neutral_comments_count`, `negative_comments_count` | Conteos por sentimiento. |
+| `positive_comment_relevance`, `negative_comment_relevance` | Sumas de relevancia usadas para calcular el puntaje de comentarios. |
 | `confluence_updated_at` | Última actualización de la página informada por Confluence. |
 | `likes_count` | Cantidad de likes observada. |
+| `word_count` | Palabras analizadas para calcular ortografía proporcionalmente. |
 | `spelling_errors_count` | Errores ortográficos detectados. |
 | `valid_links_count`, `invalid_links_count` | Conteos de enlaces verificados. |
+| `unchecked_links_count` | Enlaces omitidos o no verificables. |
+| `comparison_group` | Grupo semántico usado para comparar los likes de páginas similares. |
 | `author_exists_score` | Puntaje del criterio de autor; peso 10 %. |
 | `comments_score` | Puntaje del criterio de comentarios; peso 10 %. |
 | `freshness_score` | Puntaje del criterio de vigencia; peso 15 %. |
@@ -76,6 +81,8 @@ Los campos de medición conservan la evidencia numérica básica; los campos
 | `scoring_version` | Versión de algoritmo y pesos usada para `total_score`. |
 | `evaluation_status` | Estado del proceso de evaluación, gestionado por el servicio. |
 | `error_message` | Error asociado a una evaluación incompleta o fallida. |
+| `ai_model` | Modelo de Copilot usado para los criterios subjetivos. |
+| `ai_prompt_version` | Versión del prompt de evaluación usado. |
 | `created_at`, `updated_at` | Auditoría del registro local. |
 
 Los pesos suman 100 %. El servicio calcula la nota de este modo:
@@ -124,3 +131,12 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
 
 El script crea objetos nuevos; no es una migración para una base que ya tenga
 estas tablas, índices, función o triggers.
+
+Si las tablas ya existen con el esquema anterior, aplica la migración de
+[`migrations/001_add_evaluator_metrics.sql`](./migrations/001_add_evaluator_metrics.sql)
+para agregar las columnas nuevas que requiere el evaluador:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f db/migrations/001_add_evaluator_metrics.sql
+```

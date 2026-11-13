@@ -65,3 +65,59 @@ pueden evaluarse después de cargarlas. El inventario de integraciones incluye
 un enlace `.invalid` intencionalmente no resoluble como ejemplo de referencia
 rota. Las fechas reales, likes, comentarios y autores no se pueden garantizar
 mediante estos archivos de creación.
+
+## Evaluación diaria
+
+El paquete [`scripts/evaluate_confluence/`](./scripts/evaluate_confluence/)
+obtiene las páginas y espacios actuales con la API v2 de Confluence, calcula autor,
+antigüedad, ortografía y enlaces, y usa GitHub Copilot para clasificar
+comentarios y evaluar estructura. Luego calcula likes por percentil dentro de
+grupos de páginas similares y persiste una evaluación diaria por página. Las
+reglas, pesos y columnas se describen en [`db/README.md`](./db/README.md).
+
+Antes de ejecutar, instala `requirements.txt` y crea las tablas de
+[`db/schema.sql`](./db/schema.sql) en PostgreSQL. Si la base ya tiene las tablas
+anteriores, aplica primero
+[`db/migrations/001_add_evaluator_metrics.sql`](./db/migrations/001_add_evaluator_metrics.sql).
+El evaluador requiere Python 3.11 o posterior y estas variables:
+
+- `ATLASSIAN_EMAIL` y `ATLASSIAN_API_TOKEN`: credenciales API de Confluence.
+- `COPILOT_GITHUB_TOKEN`: token OAuth de usuario compatible con GitHub Copilot
+  SDK. Es obligatorio tanto localmente como en Actions; no uses un Personal
+  Access Token, que el endpoint de Copilot rechaza.
+- `DATABASE_URL`: conexión PostgreSQL (no necesaria con `--dry-run`).
+- `CONFLUENCE_BASE_URL`: opcional; por defecto es
+  `https://bcphackaton.atlassian.net`.
+- `COPILOT_MODEL`: opcional; por defecto `gpt-4.1`, disponible para la cuenta
+  validada con el SDK. Define otro modelo solo si aparece disponible para tu
+  cuenta y funciona con el endpoint de chat usado por Copilot SDK.
+- `SPELLING_ALLOWLIST`: opcional; palabras técnicas adicionales separadas por
+  comas.
+
+Ejecuta primero las pruebas y, si quieres inspeccionar una evaluación sin
+escribir en la base de datos, usa:
+
+```sh
+python -m unittest discover -s tests -v
+python -m scripts.evaluate_confluence --dry-run
+```
+
+`--dry-run` todavía consulta Confluence, verifica enlaces externos y envía el
+contenido de páginas y comentarios a Copilot para evaluarlos; solo evita
+persistir resultados en PostgreSQL. Ejecución normal:
+
+```sh
+python -m scripts.evaluate_confluence
+```
+
+El workflow
+[`evaluate-confluence.yml`](./.github/workflows/evaluate-confluence.yml)
+ejecuta las pruebas y evaluación cada día a las 07:00 UTC, y también admite
+ejecución manual. Configura los secretos `ATLASSIAN_EMAIL`,
+`ATLASSIAN_API_TOKEN`, `COPILOT_GITHUB_TOKEN` y `DATABASE_URL` en GitHub
+Actions. `COPILOT_GITHUB_TOKEN` debe ser un OAuth user access token aceptado por
+Copilot, no un PAT. Las variables `CONFLUENCE_BASE_URL` y `COPILOT_MODEL` son
+opcionales.
+
+El proceso actualiza la fila del mismo día en caso de reintento y guarda estado
+fallido por página cuando no se puede completar su evaluación.
