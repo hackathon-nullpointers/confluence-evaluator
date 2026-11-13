@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "product": "Confluence Cloud",
+  "spaces": [
+    {
+      "key": "SQCG",
+      "name": "SQ. Cloud Governance",
+      "description": "Gobierno de recursos en la nube, responsabilidades, costos y cumplimiento."
+    },
+    {
+      "key": "COESEC",
+      "name": "COE de Seguridad",
+      "description": "Centro de excelencia de seguridad: controles, revisiones y gestión de excepciones."
+    },
+    {
+      "key": "ATLAS",
+      "name": "ATLAS",
+      "description": "Catálogo de servicios, contratos de integración y decisiones de la plataforma ATLAS."
+    },
+    {
+      "key": "SREF",
+      "name": "SRE - SITE RELIABILITY ENGINEERING FRAMEWORK",
+      "description": "Marco de confiabilidad: objetivos de servicio, respuesta a incidentes y mejora operativa."
+    }
+  ]
+}

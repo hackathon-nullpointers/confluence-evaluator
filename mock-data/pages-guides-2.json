@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "product": "Confluence Cloud",
+  "pages": [
+    {
+      "spaceKey": "SQCG",
+      "payload": {
+        "status": "current",
+        "title": "Procedimiento de alta de una cuenta cloud",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Alta de una cuenta cloud</h1><h2>Objetivo y alcance</h2><p>Definir un proceso repetible para crear cuentas de desarrollo, pruebas y producción bajo el gobierno corporativo. Aplica a cuentas nuevas; las migraciones requieren una revisión adicional de dependencias.</p><h2>Responsables</h2><ul><li>El solicitante identifica el producto y justifica la necesidad.</li><li>Cloud Governance aprueba presupuesto, clasificación y controles.</li><li>Plataforma aprovisiona la cuenta y verifica la configuración.</li><li>El propietario técnico valida los accesos y asume la operación.</li></ul><h2>Datos requeridos</h2><p>Registrar producto, ambiente, centro de costos, presupuesto mensual, región, clasificación de datos, propietario técnico y contacto operativo. No adjuntar credenciales ni datos de clientes.</p><h2>Procedimiento</h2><ol><li>Buscar cuentas existentes para evitar duplicados.</li><li>Crear en Jira una solicitud con resumen [CLOUD] Alta de cuenta - producto - ambiente y los datos requeridos.</li><li>Obtener la aprobación del responsable del presupuesto y de Cloud Governance.</li><li>Crear una tarea vinculada de aprovisionamiento para Plataforma, dependiente de la aprobación.</li><li>Aplicar la configuración base: identidad federada, registros de auditoría, restricciones de región y etiquetas de propietario y centro de costos.</li><li>Crear una tarea de validación de accesos y alertas de consumo para el propietario técnico.</li><li>Adjuntar evidencia de las comprobaciones y registrar la cuenta en el inventario.</li></ol><h2>Criterios de aceptación</h2><ul><li>La cuenta tiene propietario y presupuesto aprobados.</li><li>Los accesos se otorgan por rol y no mediante usuarios compartidos.</li><li>Los registros de auditoría y alertas de consumo están activos.</li><li>Las tareas de aprovisionamiento y validación están resueltas.</li></ul><h2>Excepciones y revisión</h2><p>Si un control no puede aplicarse, mantener la solicitud bloqueada hasta registrar una excepción con responsable y vencimiento. Cloud Governance revisa el procedimiento semestralmente.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "SQCG",
+      "payload": {
+        "status": "current",
+        "title": "Estándar de etiquetas y control de costos cloud",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Etiquetas y control de costos</h1><h2>Propósito</h2><p>Permitir que cada recurso se asocie a un producto, un responsable y un presupuesto. El estándar aplica a recursos nuevos y existentes que soporten etiquetas.</p><h2>Etiquetas obligatorias</h2><table><tbody><tr><th>Etiqueta</th><th>Contenido</th><th>Ejemplo</th></tr><tr><td>producto</td><td>Identificador del catálogo</td><td>portal-interno</td></tr><tr><td>ambiente</td><td>desarrollo, pruebas o producción</td><td>pruebas</td></tr><tr><td>centro-costos</td><td>Código aprobado por finanzas</td><td>CC-DEMO</td></tr><tr><td>propietario</td><td>Equipo responsable</td><td>plataforma</td></tr></tbody></table><h2>Aplicación</h2><ol><li>Declarar las etiquetas en la configuración de infraestructura.</li><li>Validarlas antes del despliegue y rechazar valores vacíos.</li><li>Revisar semanalmente el inventario para detectar recursos sin clasificación.</li><li>Crear una tarea Jira por producto con recursos pendientes y asignarla al propietario técnico.</li><li>Actualizar las etiquetas y adjuntar el inventario corregido antes de cerrar la tarea.</li></ol><h2>Revisión de consumo</h2><p>El propietario compara semanalmente el gasto acumulado con el presupuesto mensual. Al alcanzar el 80 %, registra una revisión de capacidad y notifica a finanzas; superar el presupuesto requiere aprobación explícita. No se eliminan recursos de producción de forma automática por exceder un umbral.</p><h2>Excepciones</h2><p>Para recursos que no admitan etiquetas, registrar la asociación en el inventario de costos. La excepción debe incluir identificador del recurso, motivo, responsable y fecha de revisión.</p><h2>Evidencia y mantenimiento</h2><p>Conservar el reporte de consumo, las acciones acordadas y las excepciones revisadas. Cloud Governance mantiene el estándar y revisa trimestralmente su cumplimiento.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "SQCG",
+      "payload": {
+        "status": "current",
+        "title": "Notas pendientes de presupuesto cloud",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>varios</h1><p>el presupueto esta por ber. ai ke rebisar las kuentas y los gastos despues. responsable pendiente, fecha pendiente, falta la tabla y los montos. pedir un tiket si falta algo pero no se sabe a kien.</p><h4>cosas</h4><p>esto no esta terminado. el reporte anterior estaba <a href=\"https://cloud-budget.invalid/reporte\">aca</a> y la planilla <a href=\"https://cloud-costs.invalid/planilla\">aqui</a>. falta confirmar todo.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "COESEC",
+      "payload": {
+        "status": "current",
+        "title": "Procedimiento de revisión de seguridad de una solución",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Revisión de seguridad de una solución</h1><h2>Objetivo y alcance</h2><p>Identificar riesgos antes de desplegar una solución nueva o modificar autenticación, exposición de interfaces o tratamiento de datos. No sustituye la gestión de incidentes activos.</p><h2>Preparación</h2><p>El equipo solicitante prepara un diagrama de componentes, flujos de datos, clasificación de información, mecanismos de identidad y lista de dependencias. Los ejemplos deben estar anonimizados y no contener secretos.</p><h2>Roles</h2><ul><li>El propietario técnico presenta la solución y atiende observaciones.</li><li>El COE de Seguridad realiza la revisión y clasifica los hallazgos.</li><li>El responsable de negocio decide sobre el riesgo residual dentro de sus atribuciones.</li></ul><h2>Pasos y tickets Jira</h2><ol><li>Crear una solicitud [SEG] Revisión de solución - nombre con alcance, ambiente y fecha requerida.</li><li>Adjuntar diseño y evidencias de controles. El COE confirma si la información es suficiente antes de iniciar.</li><li>Revisar límites de confianza, autorización, registros, protección de datos y recuperación.</li><li>Crear una tarea vinculada por hallazgo, indicando riesgo, control esperado, responsable y criterio de validación.</li><li>Corregir los hallazgos y aportar evidencia. El revisor verifica el resultado antes de resolver cada tarea.</li><li>Si queda riesgo residual, tramitar una excepción con vencimiento y aprobación antes del despliegue.</li></ol><h2>Criterio de cierre</h2><p>La solicitud se cierra cuando los hallazgos están corregidos o cubiertos por una excepción vigente, la evidencia es verificable y se registra el alcance exacto de la revisión. Un cambio posterior de alcance requiere reevaluación.</p><h2>Mantenimiento</h2><p>El COE de Seguridad revisa esta guía semestralmente y cuando cambia la política de controles.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "COESEC",
+      "payload": {
+        "status": "current",
+        "title": "Gestión de excepciones temporales de seguridad",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Excepciones temporales de seguridad</h1><h2>Propósito</h2><p>Documentar y controlar desviaciones temporales de un control sin convertirlas en autorizaciones permanentes. Una excepción no elimina la responsabilidad de corregir la causa.</p><h2>Información obligatoria</h2><ul><li>Control afectado y motivo por el que no puede cumplirse.</li><li>Activos, ambientes y datos dentro del alcance.</li><li>Riesgo, controles compensatorios y forma de comprobarlos.</li><li>Responsable de negocio, responsable técnico y fecha de vencimiento.</li><li>Plan de corrección con tareas y evidencia de cierre.</li></ul><h2>Flujo de aprobación</h2><ol><li>Crear una solicitud Jira [EXC] Control - servicio con todos los datos obligatorios.</li><li>El COE revisa el riesgo y solicita evidencia de los controles compensatorios.</li><li>El responsable de negocio aprueba o rechaza dentro de sus atribuciones. Riesgos fuera de ellas se escalan al órgano correspondiente.</li><li>Crear tareas de corrección vinculadas, con fechas anteriores al vencimiento.</li><li>Revisar semanalmente excepciones próximas a vencer y comunicar bloqueos.</li><li>Validar la corrección y cerrar la excepción con evidencia.</li></ol><h2>Vencimiento y renovación</h2><p>La excepción vence como máximo a los 90 días. La renovación requiere una nueva revisión del riesgo y una justificación del retraso; no se aprueba automáticamente. Una excepción vencida se escala al responsable de seguridad y de negocio para decidir las medidas aplicables.</p><h2>Criterios de aceptación</h2><p>Una aprobación válida identifica quién aceptó el riesgo, qué activos cubre y hasta cuándo aplica. El cierre requiere comprobar el control original, no solo completar la tarea administrativa.</p><h2>Responsable del documento</h2><p>El COE de Seguridad mantiene el registro y revisa esta política cada seis meses.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "COESEC",
+      "payload": {
+        "status": "current",
+        "title": "Borrador de inventario de controles",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>controles</h1><p>ay varios controles pero falta el imbentario. no esta la lista ni la evidensia. preguntar al ekipo despues. no sabemos cuales aplican ni a ke sistemas.</p><h5>pendiente</h5><p>dueño por definir. revison sin fecha. el listado esta en <a href=\"https://security-controls.invalid/lista\">lista anterior</a>. el detalle se agregara luego, todabia no esta.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "ATLAS",
+      "payload": {
+        "status": "current",
+        "title": "Guía de registro de servicios en el catálogo ATLAS",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Registro de servicios en ATLAS</h1><h2>Objetivo</h2><p>Contar con un inventario verificable de servicios y sus dependencias para facilitar soporte, revisión de cambios y análisis de impacto. Aplica a servicios internos y externos administrados por la plataforma.</p><h2>Datos mínimos</h2><table><tbody><tr><th>Campo</th><th>Descripción</th></tr><tr><td>Identificador</td><td>Nombre único y estable del servicio.</td></tr><tr><td>Propietario</td><td>Equipo responsable y canal de soporte.</td></tr><tr><td>Ambientes</td><td>Desarrollo, pruebas y producción disponibles.</td></tr><tr><td>Dependencias</td><td>Servicios y almacenes necesarios para operar.</td></tr><tr><td>Operación</td><td>Objetivos de servicio y procedimiento de recuperación.</td></tr></tbody></table><h2>Procedimiento</h2><ol><li>Buscar el identificador en el catálogo para evitar registros duplicados.</li><li>Crear una solicitud Jira [ATLAS] Registrar servicio - identificador, con los datos mínimos y el contrato de integración.</li><li>El equipo de plataforma revisa dependencias, responsable y acceso a la documentación.</li><li>Crear una tarea vinculada para completar campos faltantes; no publicar registros sin propietario.</li><li>Publicar la ficha y pedir al equipo consumidor que valide el contrato y el canal de soporte.</li><li>Adjuntar la ficha aprobada al ticket y cerrar la solicitud.</li></ol><h2>Mantenimiento y baja</h2><p>El propietario revisa la ficha trimestralmente y ante cambios de contrato. Para retirar un servicio, identifica consumidores, acuerda una fecha y registra una tarea de baja; conserva la ficha como retirada para mantener la trazabilidad.</p><h2>Criterios de aceptación</h2><p>La ficha es única, tiene propietario, dependencias verificadas y documentación operativa accesible. Un consumidor debe poder identificar cómo solicitar soporte sin consultar a terceros.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "ATLAS",
+      "payload": {
+        "status": "current",
+        "title": "Estándar de versionado de contratos de integración ATLAS",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Versionado de contratos de integración</h1><h2>Propósito y alcance</h2><p>Permitir que productores y consumidores evolucionen sin interrupciones no planificadas. Aplica a interfaces de consulta y mensajes publicados por servicios registrados en ATLAS.</p><h2>Clasificación del cambio</h2><ul><li>Compatible: añade campos opcionales sin cambiar el significado de los existentes.</li><li>Incompatible: elimina un campo, modifica su tipo o cambia una regla que un consumidor utiliza.</li><li>Corrección documental: aclara una descripción sin alterar el comportamiento.</li></ul><h2>Procedimiento para cambios incompatibles</h2><ol><li>Inventariar consumidores y confirmar un responsable por integración.</li><li>Crear una tarea Jira [ATLAS] Nueva versión de contrato - servicio con motivación, diferencias y plan de migración.</li><li>Publicar la nueva versión junto con ejemplos anonimizados y mantener la versión anterior durante la transición acordada.</li><li>Crear tareas vinculadas por consumidor para adaptar y probar la integración.</li><li>Ejecutar pruebas de contrato y registrar evidencia de compatibilidad.</li><li>Retirar la versión anterior solo cuando los consumidores confirmados hayan migrado y el monitoreo no detecte tráfico pendiente.</li></ol><h2>Validación y reversión</h2><p>Antes de publicar, probar campos opcionales, errores y mensajes duplicados cuando corresponda. Si falla la nueva versión, conservar la anterior y detener la migración; la tarea debe registrar causa, impacto y siguiente revisión.</p><h2>Criterio de cierre</h2><p>La migración termina cuando no quedan consumidores en la versión retirada, la ficha del catálogo está actualizada y las tareas de validación tienen evidencia.</p><h2>Revisión</h2><p>Arquitectura de ATLAS mantiene el estándar y lo revisa cada año.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "ATLAS",
+      "payload": {
+        "status": "current",
+        "title": "Apuntes incompletos de dependencias ATLAS",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>dependensias</h1><p>atlas usa otros servisios. falta poner cuales, el diagrama no esta y nadie confirmo la version. ver con alguien del ekipo, esto es un apunte nomas. falta contexto y pruevas.</p><h4>mas</h4><p>el diagrama estaba en <a href=\"https://atlas-diagrams.invalid/viejo\">este sitio</a> y los contratos en <a href=\"https://atlas-contracts.invalid/catalogo\">otro sitio</a>. pendiente completar.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "SREF",
+      "payload": {
+        "status": "current",
+        "title": "Definición de objetivos de confiabilidad y presupuesto de error",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Objetivos de confiabilidad</h1><h2>Propósito</h2><p>Acordar cómo se mide la experiencia del usuario y cuándo debe priorizarse trabajo de confiabilidad. Aplica a servicios con tráfico de producción y un propietario operativo definido.</p><h2>Indicadores y objetivo</h2><p>El indicador de disponibilidad es la proporción de solicitudes válidas respondidas correctamente. El objetivo inicial es 99,9 % sobre una ventana móvil de 30 días. Excluir únicamente comprobaciones sintéticas identificadas y tráfico inválido según una regla documentada; las fallas de dependencias que impactan al usuario cuentan como fallas del servicio.</p><h2>Presupuesto de error</h2><p>El presupuesto corresponde al 0,1 % de solicitudes válidas en la ventana. Su consumo se calcula con las solicitudes fallidas de esa misma población. No mezclar un indicador basado en solicitudes con minutos de indisponibilidad.</p><h2>Procedimiento de adopción</h2><ol><li>Crear una tarea Jira [SRE] Definir objetivo - servicio con recorrido del usuario y fuentes de medición.</li><li>Acordar numerador, denominador y clasificación de errores con el propietario del producto.</li><li>Implementar panel y alertas, y comprobarlos con tráfico controlado.</li><li>Revisar semanalmente el consumo del presupuesto con el equipo del servicio.</li><li>Si el presupuesto se agota, priorizar tareas de confiabilidad y posponer cambios de funcionalidad hasta recuperar margen; las correcciones urgentes siguen una revisión de riesgo.</li></ol><h2>Criterios de aceptación</h2><ul><li>El panel permite reproducir el cálculo sobre los mismos datos.</li><li>Las alertas tienen responsable y procedimiento de respuesta.</li><li>El producto acepta el objetivo y las acciones ante agotamiento.</li></ul><h2>Mantenimiento</h2><p>SRE y el propietario revisan trimestralmente el objetivo a partir de necesidades del usuario, no para ocultar incumplimientos.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "SREF",
+      "payload": {
+        "status": "current",
+        "title": "Procedimiento de respuesta a incidentes y revisión posterior",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>Respuesta a incidentes</h1><h2>Objetivo y alcance</h2><p>Restaurar el servicio y aprender de las fallas sin atribuir culpas personales. Aplica a interrupciones o degradaciones con impacto en usuarios; los eventos de seguridad se coordinan además con el equipo especializado.</p><h2>Roles</h2><ul><li>Coordinador: organiza acciones, prioridades y decisiones.</li><li>Responsable técnico: investiga y ejecuta cambios aprobados.</li><li>Comunicador: informa alcance y evolución a los interesados.</li></ul><h2>Procedimiento</h2><ol><li>Validar la alerta y registrar hora de inicio, servicio, síntomas y alcance observado.</li><li>Crear un incidente Jira [INC] Degradación - servicio e identificar al coordinador.</li><li>Reunir a los responsables y comunicar impacto conocido, incertidumbres y próxima actualización en un máximo de 30 minutos.</li><li>Priorizar una mitigación reversible. Registrar cada cambio y su resultado para evitar acciones simultáneas incompatibles.</li><li>Comprobar recuperación desde la perspectiva del usuario y vigilar estabilidad durante 30 minutos.</li><li>Documentar la recuperación y programar la revisión posterior dentro de cinco días hábiles.</li></ol><h2>Revisión posterior</h2><p>Registrar cronología, factores contribuyentes, detección, mitigación y oportunidades de mejora. Crear tareas Jira vinculadas por acción, con responsable y criterio de aceptación verificable. Distinguir hechos confirmados de hipótesis.</p><h2>Criterio de cierre</h2><p>Resolver el incidente cuando el servicio esté estable y se haya comunicado la recuperación. Las acciones posteriores pueden continuar en tareas vinculadas; la revisión no se considera completa hasta asignarlas y acordar sus fechas.</p><h2>Evidencias</h2><p>Conservar métricas, decisiones y referencias de cambios sin adjuntar secretos ni información personal innecesaria. SRE revisa este procedimiento después de incidentes relevantes.</p>"
+        }
+      }
+    },
+    {
+      "spaceKey": "SREF",
+      "payload": {
+        "status": "current",
+        "title": "Borrador de respuesta a alertas antiguas",
+        "body": {
+          "representation": "storage",
+          "value": "<h1>alertas</h1><p>si suena algo rebisar el servisio. no esta el panel ni el umbral, falta el telefono de guardia y saver cual alerta es. solucion pendiente de escrivir, no ay pasos confirmados.</p><h5>etc</h5><p>el manual estaba en <a href=\"https://sre-runbooks.invalid/manual\">manual viejo</a>. falta probar y asignar responsable, despues se completa. sin criterio de recuperasion.</p>"
+        }
+      }
+    }
+  ]
+}
