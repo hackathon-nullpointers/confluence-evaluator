@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "product": "Confluence Cloud",
+  "spaces": [
+    {
+      "key": "ARQ",
+      "name": "Arquitectura",
+      "description": "Arquitectura de soluciones, plataformas y decisiones técnicas."
+    },
+    {
+      "key": "GJIRA",
+      "name": "Gobierno Jira",
+      "description": "Estándares, configuración y gobierno de Jira."
+    },
+    {
+      "key": "DSEC",
+      "name": "DevSecOps",
+      "description": "Prácticas de seguridad integradas al ciclo de desarrollo."
+    },
+    {
+      "key": "TEST",
+      "name": "Testing",
+      "description": "Estrategia, automatización y evidencias de pruebas."
+    }
+  ]
+}
