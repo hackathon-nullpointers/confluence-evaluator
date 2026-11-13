@@ -69,16 +69,19 @@ mediante estos archivos de creación.
 ## Evaluación diaria
 
 El paquete [`scripts/evaluate_confluence/`](./scripts/evaluate_confluence/)
-obtiene las páginas y espacios actuales con la API v2 de Confluence, calcula autor,
-antigüedad, ortografía y enlaces, y usa GitHub Copilot para clasificar
+obtiene las páginas y espacios actuales con la API v2 de Confluence; evalúa
+autor, antigüedad, ortografía y enlaces; y usa GitHub Copilot para clasificar
 comentarios y evaluar estructura. Luego calcula likes por percentil dentro de
 grupos de páginas similares y persiste una evaluación diaria por página. Las
 reglas, pesos y columnas se describen en [`db/README.md`](./db/README.md).
+La explicación paso a paso del algoritmo está en
+[`scripts/evaluate_confluence/README.md`](./scripts/evaluate_confluence/README.md).
 
 Antes de ejecutar, instala `requirements.txt` y crea las tablas de
 [`db/schema.sql`](./db/schema.sql) en PostgreSQL. Si la base ya tiene las tablas
-anteriores, aplica primero
-[`db/migrations/001_add_evaluator_metrics.sql`](./db/migrations/001_add_evaluator_metrics.sql).
+anteriores, aplica en orden las migraciones
+[`001_add_evaluator_metrics.sql`](./db/migrations/001_add_evaluator_metrics.sql)
+y [`002_add_author_profile.sql`](./db/migrations/002_add_author_profile.sql).
 El evaluador requiere Python 3.11 o posterior y estas variables:
 
 - `ATLASSIAN_EMAIL` y `ATLASSIAN_API_TOKEN`: credenciales API de Confluence.

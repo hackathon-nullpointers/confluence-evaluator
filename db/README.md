@@ -59,6 +59,8 @@ Los campos de medición conservan la evidencia numérica básica; los campos
 | `evaluation_date` | Día lógico de la evaluación. |
 | `evaluated_at` | Instante en que se ejecutó la evaluación. |
 | `author_account_id` | ID de cuenta del autor observado. |
+| `author_display_name` | Nombre visible del autor obtenido de Confluence. |
+| `author_email` | Correo devuelto por Confluence, sujeto a permisos y privacidad. |
 | `author_exists` | Si el autor existe en Confluence. |
 | `comments_analyzed_count` | Total de comentarios procesados por IA. |
 | `positive_comments_count`, `neutral_comments_count`, `negative_comments_count` | Conteos por sentimiento. |
@@ -101,6 +103,8 @@ total_score =
 El servicio persiste el total junto con `scoring_version` para que las
 evaluaciones anteriores conserven el resultado y la versión de reglas con que
 se calcularon.
+La explicación detallada de cada fórmula, umbral y criterio IA está en
+[`../scripts/evaluate_confluence/README.md`](../scripts/evaluate_confluence/README.md).
 
 ## Auditoría y validación
 
@@ -140,3 +144,14 @@ para agregar las columnas nuevas que requiere el evaluador:
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f db/migrations/001_add_evaluator_metrics.sql
 ```
+
+Para guardar también el nombre y correo del autor, aplica la migración:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f db/migrations/002_add_author_profile.sql
+```
+
+El correo puede estar vacío o no estar disponible según la configuración de
+privacidad de la cuenta en Atlassian. El evaluador conserva el ID de cuenta y
+continúa aunque no pueda recuperar los datos de perfil.

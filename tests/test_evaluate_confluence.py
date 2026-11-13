@@ -1,12 +1,15 @@
 import os
 import unittest
+from contextlib import redirect_stderr
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
+from io import StringIO
+from unittest.mock import Mock, patch
 
 from scripts.evaluate_confluence.config import (
     EvaluationError,
     Settings,
 )
+from scripts.evaluate_confluence.confluence import ConfluenceClient
 from scripts.evaluate_confluence.documents import (
     extract_document,
     extract_item_document,
@@ -27,6 +30,7 @@ from scripts.evaluate_confluence.scoring import (
     subtract_calendar_months,
     weighted_total,
 )
+from scripts.evaluate_confluence.service import collect_page_work
 
 
 class EvaluationScoringTests(unittest.TestCase):
@@ -234,6 +238,97 @@ class EvaluationScoringTests(unittest.TestCase):
         self.assertEqual(links_score(3, 1, 10), 75.0)
         self.assertEqual(links_score(0, 0, 0), 100.0)
         self.assertEqual(links_score(0, 0, 2), 50.0)
+
+    def test_user_lookup_caches_profile_and_uses_account_id_endpoint(self) -> None:
+        profile = {
+            "accountId": "author-1",
+            "displayName": "Ada Lovelace",
+            "email": "ada@example.com",
+        }
+        client = object.__new__(ConfluenceClient)
+        client.site_url = "https://confluence.example"
+        client._user_cache = {}
+
+        with patch.object(ConfluenceClient, "get_json", return_value=profile) as get_json:
+            first = client.get_user("author-1")
+            second = client.get_user("author-1")
+
+        self.assertEqual(first, profile)
+        self.assertIs(second, first)
+        get_json.assert_called_once_with(
+            "https://confluence.example/wiki/rest/api/user",
+            {"accountId": "author-1"},
+            allow_not_found=True,
+        )
+
+    def test_page_work_includes_author_profile_when_confluence_exposes_it(self) -> None:
+        api = Mock()
+        api.get_user.return_value = {
+            "displayName": "Ada Lovelace",
+            "email": "ada@example.com",
+        }
+        api.page_url.return_value = "https://confluence.example/page"
+        api.get_page_comments.return_value = []
+        api.get_likes_count.return_value = 2
+        page = {
+            "id": "page-1",
+            "spaceId": "space-1",
+            "title": "Design",
+            "authorId": "author-1",
+            "version": {"authorId": "author-1", "createdAt": "2026-11-12T10:00:00Z"},
+            "body": {"storage": {"value": "<p>Texto de ejemplo</p>"}},
+        }
+
+        with patch(
+            "scripts.evaluate_confluence.service.spelling_counts",
+            return_value=(3, 0),
+        ):
+            result = collect_page_work(
+                api,
+                [page],
+                {"space-1": {"id": "space-1", "key": "ARQ", "name": "Arquitectura"}},
+                Mock(),
+                link_checker=lambda links: (0, 0, 0),
+            )
+
+        self.assertEqual(result[0]["author_display_name"], "Ada Lovelace")
+        self.assertEqual(result[0]["author_email"], "ada@example.com")
+        api.get_user.assert_called_once_with("author-1")
+
+    def test_profile_lookup_failure_does_not_fail_page_evaluation(self) -> None:
+        api = Mock()
+        api.get_user.side_effect = EvaluationError("HTTP 403")
+        api.page_url.return_value = "https://confluence.example/page"
+        api.get_page_comments.return_value = []
+        api.get_likes_count.return_value = 0
+        page = {
+            "id": "page-1",
+            "spaceId": "space-1",
+            "title": "Design",
+            "authorId": "author-1",
+            "version": {"authorId": "author-1", "createdAt": "2026-11-12T10:00:00Z"},
+            "body": {"storage": {"value": "<p>Texto de ejemplo</p>"}},
+        }
+
+        with (
+            patch(
+                "scripts.evaluate_confluence.service.spelling_counts",
+                return_value=(3, 0),
+            ),
+            redirect_stderr(StringIO()) as error_output,
+        ):
+            result = collect_page_work(
+                api,
+                [page],
+                {"space-1": {"id": "space-1", "key": "ARQ", "name": "Arquitectura"}},
+                Mock(),
+                link_checker=lambda links: (0, 0, 0),
+            )
+
+        self.assertIsNone(result[0]["author_display_name"])
+        self.assertIsNone(result[0]["author_email"])
+        self.assertIsNone(result[0]["failure"])
+        self.assertIn("HTTP 403", error_output.getvalue())
 
 
 if __name__ == "__main__":

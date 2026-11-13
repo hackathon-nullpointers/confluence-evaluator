@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -32,6 +33,13 @@ from .scoring import (
 LinkChecker = Callable[[list[str]], tuple[int, int, int]]
 
 
+def _profile_value(profile: dict[str, Any], key: str) -> str | None:
+    value = profile.get(key)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
 def collect_page_work(
     api: ConfluenceGateway,
     pages: list[dict[str, Any]],
@@ -40,6 +48,23 @@ def collect_page_work(
     link_checker: LinkChecker = check_links,
 ) -> list[dict[str, Any]]:
     work: list[dict[str, Any]] = []
+    user_profiles: dict[str, dict[str, Any] | None] = {}
+
+    def author_profile(account_id: str | None) -> dict[str, Any] | None:
+        if not account_id:
+            return None
+        if account_id not in user_profiles:
+            try:
+                user_profiles[account_id] = api.get_user(account_id)
+            except EvaluationError as error:
+                user_profiles[account_id] = None
+                print(
+                    f"Advertencia: no se pudo consultar el perfil del autor "
+                    f"{account_id}: {error}",
+                    file=sys.stderr,
+                )
+        return user_profiles[account_id]
+
     for page in pages:
         page_id = str(page.get("id", ""))
         space_id = str(page.get("spaceId", ""))
@@ -49,6 +74,12 @@ def collect_page_work(
                 f"No se pudo resolver el espacio de la página {page_id or '(sin id)'}."
             )
 
+        author_account_id = page.get("authorId") or (
+            page.get("version", {}).get("authorId")
+            if isinstance(page.get("version"), dict)
+            else None
+        )
+        author_account_id = str(author_account_id) if author_account_id else None
         entry: dict[str, Any] = {
             "page_id": page_id,
             "space_id": space_id,
@@ -57,12 +88,9 @@ def collect_page_work(
             "title": str(page.get("title", "")),
             "page_url": api.page_url(page),
             "confluence_status": str(page.get("status", "current")),
-            "author_account_id": page.get("authorId")
-            or (
-                page.get("version", {}).get("authorId")
-                if isinstance(page.get("version"), dict)
-                else None
-            ),
+            "author_account_id": author_account_id,
+            "author_display_name": None,
+            "author_email": None,
             "updated_at": None,
             "document": None,
             "comments": [],
@@ -74,6 +102,12 @@ def collect_page_work(
             "unchecked_links_count": None,
             "failure": None,
         }
+        profile = author_profile(author_account_id)
+        if profile:
+            entry["author_display_name"] = _profile_value(
+                profile, "displayName"
+            ) or _profile_value(profile, "publicName")
+            entry["author_email"] = _profile_value(profile, "email")
         try:
             detail = page
             if not storage_value(detail) or not isinstance(detail.get("version"), dict):
@@ -83,6 +117,17 @@ def collect_page_work(
                 entry["author_account_id"] = detail.get("authorId") or (
                     version.get("authorId") if isinstance(version, dict) else None
                 )
+                entry["author_account_id"] = (
+                    str(entry["author_account_id"])
+                    if entry["author_account_id"]
+                    else None
+                )
+                profile = author_profile(entry["author_account_id"])
+                if profile:
+                    entry["author_display_name"] = _profile_value(
+                        profile, "displayName"
+                    ) or _profile_value(profile, "publicName")
+                    entry["author_email"] = _profile_value(profile, "email")
             entry["updated_at"] = get_updated_at(detail)
             document = extract_item_document(detail)
             if not document.text.strip():

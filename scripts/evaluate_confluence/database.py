@@ -86,6 +86,8 @@ class EvaluationDatabase:
                     "evaluation_date",
                     "evaluated_at",
                     "author_account_id",
+                    "author_display_name",
+                    "author_email",
                     "author_exists",
                     "comments_analyzed_count",
                     "positive_comments_count",
@@ -138,6 +140,8 @@ class EvaluationDatabase:
                         "evaluation_date": evaluation_date,
                         "evaluated_at": now,
                         "author_account_id": page["author_account_id"],
+                        "author_display_name": page.get("author_display_name"),
+                        "author_email": page.get("author_email"),
                         "author_exists": bool(page["author_account_id"]),
                         "comments_analyzed_count": comments.get(
                             "comments_analyzed_count"

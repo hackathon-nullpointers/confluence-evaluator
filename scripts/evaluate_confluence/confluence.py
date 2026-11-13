@@ -20,6 +20,7 @@ class ConfluenceClient:
         self.api_root = f"{settings.site_url}/wiki/api/v2"
         self.hostname = urlsplit(settings.site_url).hostname
         self.session = requests.Session()
+        self._user_cache: dict[str, dict[str, Any] | None] = {}
         self.session.auth = (settings.atlassian_email, settings.atlassian_token)
         self._last_link_header = ""
         self.session.headers.update(
@@ -48,16 +49,23 @@ class ConfluenceClient:
         if (
             parsed.scheme != "https"
             or parsed.hostname != self.hostname
-            or not parsed.path.startswith("/wiki/api/v2/")
+            or not parsed.path.startswith(("/wiki/api/v2/", "/wiki/rest/api/"))
         ):
-            raise EvaluationError("Confluence devolvió una URL de paginación no confiable.")
+            raise EvaluationError("Confluence devolvió una URL de API no confiable.")
 
-    def get_json(self, url: str, params: dict[str, Any] | None = None) -> Any:
+    def get_json(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        allow_not_found: bool = False,
+    ) -> Any:
         self._validate_api_url(url)
         try:
             response = self.session.get(
                 url, params=params, timeout=(10, 60), allow_redirects=False
             )
+            if allow_not_found and response.status_code == 404:
+                return None
             response.raise_for_status()
             self._last_link_header = response.headers.get("Link", "")
             return response.json()
@@ -111,6 +119,18 @@ class ConfluenceClient:
             "/pages",
             {"status": "current", "body-format": "storage", "limit": 100},
         )
+
+    def get_user(self, account_id: str) -> dict[str, Any] | None:
+        if account_id not in self._user_cache:
+            payload = self.get_json(
+                f"{self.site_url}/wiki/rest/api/user",
+                {"accountId": account_id},
+                allow_not_found=True,
+            )
+            if payload is not None and not isinstance(payload, dict):
+                raise EvaluationError("Confluence devolvió un perfil de usuario inválido.")
+            self._user_cache[account_id] = payload
+        return self._user_cache[account_id]
 
     def get_page_detail(
         self, page_id: str, body_format: str = "storage"

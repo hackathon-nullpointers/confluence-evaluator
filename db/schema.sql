@@ -31,6 +31,8 @@ CREATE TABLE page_evaluations (
     evaluation_date DATE NOT NULL DEFAULT CURRENT_DATE,
     evaluated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     author_account_id TEXT,
+    author_display_name TEXT,
+    author_email TEXT,
     author_exists BOOLEAN,
     positive_comments_count INTEGER,
     negative_comments_count INTEGER,
@@ -130,6 +132,10 @@ COMMENT ON COLUMN page_evaluations.evaluated_at IS
     'Fecha y hora exactas en que se ejecutó esta evaluación.';
 COMMENT ON COLUMN page_evaluations.author_account_id IS
     'Identificador de cuenta del autor de la página observado durante la evaluación.';
+COMMENT ON COLUMN page_evaluations.author_display_name IS
+    'Nombre visible del autor según el perfil de Confluence al momento de evaluar.';
+COMMENT ON COLUMN page_evaluations.author_email IS
+    'Correo visible del autor según los permisos y la configuración de privacidad de Confluence.';
 COMMENT ON COLUMN page_evaluations.author_exists IS
     'Indica si el autor observado existe como usuario de Confluence.';
 COMMENT ON COLUMN page_evaluations.positive_comments_count IS
